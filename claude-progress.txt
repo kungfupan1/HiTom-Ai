@@ -1,0 +1,45 @@
+# Hi-Tom-AI 项目进度
+
+## 项目概述
+AI 电商内容生成平台重构项目
+
+### 目标
+1. Provider 配置化 - 模型、API 参数可在管理后台配置
+2. 计费配置化 - 每个模型的积分消耗规则可配置
+3. Vercel Functions 代理 - AI 请求通过 Serverless 转发
+4. 前端保留 - Vue 前端 UI 基本不变
+5. 后端精简 - 保留业务逻辑，AI 代理迁移到 Vercel
+
+### 架构
+```
+用户浏览器
+    │
+    ├── AI 请求 → Vercel Functions → AI 服务商
+    │
+    └── 业务请求 → 你的服务器 (FastAPI + SQLite)
+```
+
+---
+
+## 进度记录
+
+### 2026-03-18
+- [x] 创建 feature_list.json (20 项功能)
+- [x] 创建 claude-progress.txt
+- [ ] 初始化 Git 仓库
+- [ ] 创建项目目录结构
+
+---
+
+## 统计
+- 总功能数: 20
+- 已完成: 0
+- 进行中: 0
+- 未开始: 20
+
+---
+
+## 备注
+- T8Star API 无地区限制，Vercel 可访问
+- 数据库继续使用 SQLite（在自有服务器）
+- 前端继续使用 Vue 3 + Vite

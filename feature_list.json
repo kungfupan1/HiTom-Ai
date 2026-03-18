@@ -1,0 +1,244 @@
+[
+  {
+    "id": 1,
+    "category": "基础设施",
+    "description": "项目初始化：创建目录结构、初始化 Git、创建基础配置文件",
+    "steps": [
+      "创建项目目录结构 (vercel-api/, 后端改造目录)",
+      "初始化 Git 仓库并创建首次提交",
+      "创建 claude-progress.txt 进度追踪文件",
+      "创建 README.md 项目说明文档"
+    ],
+    "passes": false
+  },
+  {
+    "id": 2,
+    "category": "数据库",
+    "description": "设计并创建数据库表结构：模型配置表、计费规则表、系统配置表",
+    "steps": [
+      "设计 ai_models 表（模型基础信息）",
+      "设计 model_pricing 表（计费规则）",
+      "设计 system_config 表（系统配置）",
+      "创建数据库迁移脚本",
+      "插入默认数据（sora-2, grok-video-3 等模型）"
+    ],
+    "passes": false
+  },
+  {
+    "id": 3,
+    "category": "后端API",
+    "description": "创建模型管理 API：获取模型列表、获取模型详情、CRUD 操作",
+    "steps": [
+      "GET /api/models - 获取所有启用的模型列表",
+      "GET /api/models/:id - 获取模型详情（含计费规则）",
+      "POST /api/admin/models - 创建新模型",
+      "PUT /api/admin/models/:id - 更新模型配置",
+      "DELETE /api/admin/models/:id - 删除模型",
+      "PUT /api/admin/models/:id/toggle - 启用/禁用模型"
+    ],
+    "passes": false
+  },
+  {
+    "id": 4,
+    "category": "后端API",
+    "description": "创建计费计算 API：根据模型和参数计算费用",
+    "steps": [
+      "POST /api/calculate-cost - 计算生成费用",
+      "传入模型ID、时长、分辨率等参数",
+      "返回计算后的积分消耗",
+      "返回费用明细说明"
+    ],
+    "passes": false
+  },
+  {
+    "id": 5,
+    "category": "后端API",
+    "description": "创建系统配置 API：积分规则、费用说明等",
+    "steps": [
+      "GET /api/admin/config - 获取所有系统配置",
+      "PUT /api/admin/config - 更新系统配置",
+      "GET /api/config/pricing-info - 获取费用说明（公开接口）"
+    ],
+    "passes": false
+  },
+  {
+    "id": 6,
+    "category": "Vercel Functions",
+    "description": "创建 Vercel Functions 项目结构和基础配置",
+    "steps": [
+      "创建 /api 目录结构",
+      "创建 vercel.json 配置文件",
+      "配置 CORS 允许你的域名访问",
+      "创建环境变量模板 (.env.example)"
+    ],
+    "passes": false
+  },
+  {
+    "id": 7,
+    "category": "Vercel Functions",
+    "description": "实现图片生成代理 API",
+    "steps": [
+      "POST /api/ai/generate-image - 图片生成代理",
+      "从请求中获取模型配置",
+      "加上 API Key 转发到 T8Star",
+      "返回图片 URL"
+    ],
+    "passes": false
+  },
+  {
+    "id": 8,
+    "category": "Vercel Functions",
+    "description": "实现视频生成代理 API",
+    "steps": [
+      "POST /api/ai/generate-video - 视频生成代理",
+      "支持多种模型（sora-2, grok-video-3）",
+      "根据模型配置映射参数",
+      "返回 task_id"
+    ],
+    "passes": false
+  },
+  {
+    "id": 9,
+    "category": "Vercel Functions",
+    "description": "实现视频状态查询代理 API",
+    "steps": [
+      "GET /api/ai/video-status?task_id=xxx - 状态查询",
+      "根据模型配置解析响应",
+      "统一返回格式（status, progress, video_url）"
+    ],
+    "passes": false
+  },
+  {
+    "id": 10,
+    "category": "Vercel Functions",
+    "description": "实现 Provider 参数映射引擎",
+    "steps": [
+      "创建参数映射工具函数",
+      "支持字段名映射（aspect_ratio → ratio）",
+      "支持类型转换（string ↔ integer）",
+      "支持值映射（hd=true → resolution=1080P）"
+    ],
+    "passes": false
+  },
+  {
+    "id": 11,
+    "category": "前端-管理后台",
+    "description": "创建模型管理页面：模型列表、添加/编辑模型",
+    "steps": [
+      "模型列表页面（显示所有模型、启用状态）",
+      "添加模型弹窗/页面",
+      "编辑模型页面（含所有配置项）",
+      "模型启用/禁用开关"
+    ],
+    "passes": false
+  },
+  {
+    "id": 12,
+    "category": "前端-管理后台",
+    "description": "创建计费配置界面：时长阶梯价、分辨率加价等",
+    "steps": [
+      "时长阶梯价格配置表格",
+      "分辨率加价配置",
+      "比例加价配置（可选）",
+      "费用说明富文本编辑器"
+    ],
+    "passes": false
+  },
+  {
+    "id": 13,
+    "category": "前端-管理后台",
+    "description": "创建系统配置页面：积分规则、注册赠送等",
+    "steps": [
+      "注册赠送积分配置",
+      "图片生成基础费用",
+      "费用说明展示配置",
+      "保存按钮和成功提示"
+    ],
+    "passes": false
+  },
+  {
+    "id": 14,
+    "category": "前端-用户端",
+    "description": "改造视频生成页面：动态模型列表、实时费用计算",
+    "steps": [
+      "从 API 获取可用模型列表",
+      "动态渲染模型下拉选项",
+      "根据选择实时计算并显示费用",
+      "显示费用说明（从后台获取）",
+      "请求地址改为 Vercel Functions"
+    ],
+    "passes": false
+  },
+  {
+    "id": 15,
+    "category": "前端-用户端",
+    "description": "改造图片生成页面：动态模型列表、实时费用计算",
+    "steps": [
+      "从 API 获取图片模型列表",
+      "动态渲染分辨率、比例选项",
+      "实时计算并显示费用",
+      "请求地址改为 Vercel Functions"
+    ],
+    "passes": false
+  },
+  {
+    "id": 16,
+    "category": "前端-用户端",
+    "description": "创建费用确认弹窗：显示费用明细，用户确认后执行",
+    "steps": [
+      "点击生成时弹出确认框",
+      "显示：模型、参数、费用明细",
+      "确认后调用积分检查接口",
+      "积分不足时提示充值"
+    ],
+    "passes": false
+  },
+  {
+    "id": 17,
+    "category": "后端改造",
+    "description": "改造现有后端：移除 AI 代理逻辑，保留业务逻辑",
+    "steps": [
+      "移除 ai_service.py 中的 AI 调用逻辑",
+      "保留用户认证、积分管理、日志记录",
+      "新增积分预扣和确认接口",
+      "新增 deduction_id 机制防止重复扣费"
+    ],
+    "passes": false
+  },
+  {
+    "id": 18,
+    "category": "后端改造",
+    "description": "实现积分预扣机制：生成前预扣，成功后确认，失败后退还",
+    "steps": [
+      "POST /api/points/reserve - 预扣积分",
+      "POST /api/points/confirm - 确认扣费",
+      "POST /api/points/refund - 退还积分",
+      "定时任务清理超时未确认的预扣"
+    ],
+    "passes": false
+  },
+  {
+    "id": 19,
+    "category": "测试",
+    "description": "端到端测试：完整流程测试",
+    "steps": [
+      "测试模型配置 CRUD",
+      "测试费用计算准确性",
+      "测试视频生成完整流程",
+      "测试积分扣费和退还"
+    ],
+    "passes": false
+  },
+  {
+    "id": 20,
+    "category": "部署",
+    "description": "部署文档和脚本",
+    "steps": [
+      "编写 Vercel 部署指南",
+      "编写环境变量配置说明",
+      "编写数据库初始化脚本",
+      "编写 API 接口文档"
+    ],
+    "passes": false
+  }
+]
