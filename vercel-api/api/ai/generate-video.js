@@ -1,10 +1,29 @@
 /**
  * 视频生成 API
  * POST /api/ai/generate-video
+ * 复刻自 MyWebTool ai_service.py 的 submit_video_task 逻辑
  */
 
 const fetch = require('node-fetch')
-const { mapRequestParams, getApiKey } = require('../lib/provider-mapper')
+
+// 不同模型的参数配置
+const MODEL_CONFIGS = {
+  'sora-2': {
+    mapFields: { ratio: 'aspect_ratio' },
+    defaults: { private: true },
+    durationAsString: true
+  },
+  'sora-2-pro': {
+    mapFields: { ratio: 'aspect_ratio' },
+    defaults: { private: true },
+    durationAsString: true
+  },
+  'grok-video-3': {
+    mapFields: { ratio: 'ratio' },
+    defaults: {},
+    durationAsInt: true
+  }
+}
 
 module.exports = async (req, res) => {
   // 处理 CORS
@@ -33,22 +52,59 @@ module.exports = async (req, res) => {
     }
 
     // 获取 API Key
-    const apiKey = getApiKey('t8star')
+    const apiKey = process.env.T8STAR_API_KEY
     if (!apiKey) {
       return res.status(500).json({
         status: 'error',
-        message: 'API Key 未配置'
+        message: 'T8STAR_API_KEY 未配置'
       })
     }
 
-    // 构建请求参数
-    const params = { prompt, duration, ratio, resolution, images }
-    const apiParams = mapRequestParams(model, params)
+    // 获取模型配置
+    const modelConfig = MODEL_CONFIGS[model] || MODEL_CONFIGS['sora-2']
+
+    // 构建请求 payload - 复刻 MyWebTool 的 submit_video_task 逻辑
+    const payload = {
+      model: model,
+      prompt: prompt,
+      private: true
+    }
+
+    // 处理 aspect_ratio/ratio
+    const aspectRatio = ratio || '9:16'
+    if (modelConfig.mapFields.ratio === 'aspect_ratio') {
+      payload.aspect_ratio = aspectRatio
+    } else {
+      payload.ratio = aspectRatio
+    }
+
+    // 处理 duration
+    const dur = duration || 10
+    if (modelConfig.durationAsString) {
+      payload.duration = String(dur)
+    } else if (modelConfig.durationAsInt) {
+      payload.duration = parseInt(dur)
+    } else {
+      payload.duration = dur
+    }
+
+    // 处理 hd/分辨率
+    if (resolution === '1080P') {
+      payload.hd = true
+    } else {
+      payload.hd = false
+    }
+
+    // 处理参考图 - Sora 支持首图参考
+    if (images && images.length > 0) {
+      payload.images = [images[0]]
+    }
 
     // API 端点
     const endpoint = 'https://ai.t8star.cn/v2/videos/generations'
 
-    console.log(`[generate-video] Model: ${model}, Duration: ${duration}`)
+    console.log(`[generate-video] Model: ${model}, Duration: ${payload.duration}, Ratio: ${aspectRatio}`)
+    console.log(`[generate-video] Payload:`, JSON.stringify(payload, null, 2))
 
     // 发送请求
     const response = await fetch(endpoint, {
@@ -57,7 +113,7 @@ module.exports = async (req, res) => {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(apiParams)
+      body: JSON.stringify(payload)
     })
 
     const result = await response.json()

@@ -361,15 +361,33 @@ const convertImagesToBase64 = () => {
   })
 }
 
-// 图片分析（暂时简化）
+// 图片分析 - 看图生成文案
 const analyzeImages = async () => {
   if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传图片')
   analyzing.value = true
   try {
-    // 这里可以调用后端的图片分析接口
-    ElMessage.info('图片分析功能待接入')
+    // 获取 Vercel URL
+    const configRes = await request.get('/api/config/pricing-info')
+    const vercelUrl = configRes.vercel_url || ''
+
+    // 调用看图生成文案接口
+    const res = await request.post(`${vercelUrl}/api/ai/analyze-images`, {
+      images: imageBase64List.value,
+      product_type: form.product_type || '产品',
+      design_style: form.style || '现代简约',
+      target_lang: form.language.split(' (')[0] || '中文',
+      target_num: 1
+    })
+
+    if (res.status === 'success' && res.content) {
+      form.selling_points = res.content
+      ElMessage.success('文案生成成功！')
+    } else {
+      ElMessage.error('生成失败，请重试')
+    }
   } catch (e) {
-    ElMessage.error('分析失败')
+    console.error('分析失败', e)
+    ElMessage.error('分析失败: ' + (e.message || '未知错误'))
   } finally {
     analyzing.value = false
   }
