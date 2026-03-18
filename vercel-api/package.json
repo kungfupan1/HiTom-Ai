@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Hi-Tom-AI Vercel Functions - AI API Proxy",
   "scripts": {
-    "dev": "vercel dev",
+    "start": "vercel dev",
     "deploy": "vercel --prod"
   },
   "dependencies": {
