@@ -365,12 +365,24 @@ const convertImagesToBase64 = () => {
 const analyzeImages = async () => {
   if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传图片')
   analyzing.value = true
+
+  // 发送日志
+  emit('log', '开始分析图片...')
+
   try {
     // 获取 Vercel URL
     const configRes = await request.get('/api/config/pricing-info')
     const vercelUrl = configRes.vercel_url || ''
 
+    emit('log', `Vercel URL: ${vercelUrl || '(未配置)'}`)
+    emit('log', `上传图片数: ${imageBase64List.value.length}`)
+
+    if (!vercelUrl) {
+      throw new Error('Vercel URL 未配置，请联系管理员')
+    }
+
     // 调用看图生成文案接口
+    emit('log', '正在调用 AI 分析图片...')
     const res = await request.post(`${vercelUrl}/api/ai/analyze-images`, {
       images: imageBase64List.value,
       product_type: form.product_type || '产品',
@@ -379,14 +391,19 @@ const analyzeImages = async () => {
       target_num: 1
     })
 
+    emit('log', `API 返回状态: ${res.status}`)
+
     if (res.status === 'success' && res.content) {
       form.selling_points = res.content
       ElMessage.success('文案生成成功！')
+      emit('log', '文案生成成功！')
     } else {
       ElMessage.error('生成失败，请重试')
+      emit('log', `生成失败: ${JSON.stringify(res)}`)
     }
   } catch (e) {
     console.error('分析失败', e)
+    emit('log', `分析失败: ${e.message || '未知错误'}`)
     ElMessage.error('分析失败: ' + (e.message || '未知错误'))
   } finally {
     analyzing.value = false
@@ -421,22 +438,28 @@ const submitTask = async () => {
   videoUrl.value = ''
   let deductionId = null
 
+  emit('log', '开始视频生成任务...')
+
   try {
     // 1. 预扣积分
+    emit('log', '步骤1: 预扣积分...')
     const reserveRes = await request.post('/api/points/reserve', {
       amount: costInfo.value.cost,
       model_id: form.model
     })
     deductionId = reserveRes.deduction_id
+    emit('log', `预扣成功，deduction_id: ${deductionId}`)
 
     // 2. 获取 Vercel URL
     const configRes = await request.get('/api/config/pricing-info')
     const vercelUrl = configRes.vercel_url || ''
+    emit('log', `Vercel URL: ${vercelUrl}`)
 
     // 3. 构建提示词
     const prompt = `产品: ${form.product_type}\n卖点: ${form.selling_points}\n风格: ${form.style}\n类目: ${form.category}\n语言: ${form.language}\n地区: ${form.region}`
 
     // 4. 调用 Vercel Functions 生成视频
+    emit('log', `步骤2: 调用 ${form.model} 生成视频...`)
     const videoRes = await request.post(`${vercelUrl}/api/ai/generate-video`, {
       model: form.model,
       prompt: prompt,
@@ -448,15 +471,18 @@ const submitTask = async () => {
     })
 
     taskId.value = videoRes.task_id
+    emit('log', `任务已提交，task_id: ${taskId.value}`)
 
     // 5. 确认扣费
     await request.post('/api/points/confirm', { deduction_id: deductionId })
+    emit('log', '积分扣费已确认')
 
     // 6. 刷新积分
     userStore.refreshPoints()
     emit('refresh-points')
 
     // 7. 开始轮询状态
+    emit('log', '开始轮询生成状态...')
     startStatusPolling(vercelUrl)
 
     ElMessage.success('视频生成任务已提交')
@@ -468,8 +494,10 @@ const submitTask = async () => {
           deduction_id: deductionId,
           reason: '生成失败'
         })
+        emit('log', '积分已退还')
       } catch (err) {}
     }
+    emit('log', `错误: ${e.message || '提交失败'}`)
     ElMessage.error(e.message || '提交失败')
     loading.value = false
     taskStatus.value = ''

@@ -9,19 +9,23 @@
         ref="formRef"
         :model="form"
         label-width="140px"
-        style="max-width: 600px;"
+        class="config-form"
       >
         <el-divider content-position="left">积分规则</el-divider>
 
-        <el-form-item label="注册赠送积分">
-          <el-input-number v-model="form.signup_bonus" :min="0" />
-          <span style="margin-left: 8px; color: #888;">新用户注册赠送</span>
-        </el-form-item>
-
-        <el-form-item label="图片生成基础价">
-          <el-input-number v-model="form.image_base_price" :min="0" />
-          <span style="margin-left: 8px; color: #888;">积分/张</span>
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="注册赠送积分">
+              <el-input-number v-model="form.signup_bonus" :min="0" />
+            </el-form-item>
+          </el-col>
+          <el-col :xs="24" :sm="12">
+            <el-form-item label="图片生成基础价">
+              <el-input-number v-model="form.image_base_price" :min="0" />
+              <span class="form-tip">积分/张</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
 
         <el-divider content-position="left">费用说明</el-divider>
 
@@ -29,21 +33,21 @@
           <el-input
             v-model="form.pricing_description"
             type="textarea"
-            :rows="8"
+            :rows="6"
             placeholder="展示给用户的费用说明，支持换行"
           />
         </el-form-item>
 
-        <el-alert type="info" :closable="false" style="margin-bottom: 20px;">
-          <template #title>
-            提示：此费用说明将在用户端页面展示，帮助用户了解计费规则
-          </template>
-        </el-alert>
-
-        <el-divider content-position="left">Vercel Functions 配置</el-divider>
+        <el-divider content-position="left">服务配置</el-divider>
 
         <el-form-item label="Vercel URL">
-          <el-input v-model="form.vercel_url" placeholder="https://your-app.vercel.app" />
+          <el-input
+            v-model="form.vercel_url"
+            placeholder="https://your-app.vercel.app"
+          >
+            <template #prepend>https://</template>
+          </el-input>
+          <div class="form-tip">AI 生成服务的 Vercel Functions 地址，必须配置才能使用 AI 功能</div>
         </el-form-item>
 
         <el-form-item>
@@ -55,133 +59,205 @@
     </el-card>
 
     <!-- API 密钥管理 -->
-    <el-card style="margin-top: 20px;">
+    <el-card class="api-keys-card">
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-header">
           <span>API 密钥管理</span>
-          <el-button type="primary" size="small" @click="showAddDialog">
-            + 添加密钥
-          </el-button>
+          <el-tag type="info" size="small">支持多 Key 负载均衡</el-tag>
         </div>
       </template>
 
-      <el-alert type="info" :closable="false" style="margin-bottom: 16px;">
-        <template #title>
-          支持配置多个 API Key 实现负载均衡（薅羊毛策略），系统会随机选择一个可用的 Key
-        </template>
-      </el-alert>
-
-      <!-- T8Star Keys -->
-      <div class="key-section">
-        <div class="key-section-header">
-          <span class="key-section-title">🎬 T8Star API Keys（视频生成）</span>
-          <el-tag :type="t8starKeys.length > 0 ? 'success' : 'danger'" size="small">
-            {{ t8starKeys.length }} 个可用
-          </el-tag>
-        </div>
-        <el-table :data="t8starKeys" stripe v-if="t8starKeys.length > 0">
-          <el-table-column prop="key_name" label="名称" width="180" />
-          <el-table-column prop="key_value" label="Key（已掩码）" />
-          <el-table-column prop="use_count" label="使用次数" width="100" />
-          <el-table-column prop="is_enabled" label="状态" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.is_enabled ? 'success' : 'info'" size="small">
-                {{ row.is_enabled ? '启用' : '禁用' }}
+      <el-row :gutter="24">
+        <!-- T8Star Keys -->
+        <el-col :xs="24" :lg="12">
+          <div class="key-section">
+            <div class="key-section-header">
+              <span class="key-section-title">T8Star</span>
+              <span class="key-section-desc">视频生成服务</span>
+              <el-tag :type="t8starKeys.length > 0 ? 'success' : 'danger'" size="small">
+                {{ t8starKeys.length }} 个
               </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="180">
-            <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="showEditDialog(row)">编辑</el-button>
-              <el-button link type="primary" size="small" @click="toggleKeyStatus(row)">
-                {{ row.is_enabled ? '禁用' : '启用' }}
-              </el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteKey(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-else description="暂无 T8Star API Key" :image-size="60" />
-      </div>
+            </div>
 
-      <!-- ModelScope Keys -->
-      <div class="key-section" style="margin-top: 20px;">
-        <div class="key-section-header">
-          <span class="key-section-title">🤖 ModelScope API Keys（看图文案）</span>
-          <el-tag :type="modelscopeKeys.length > 0 ? 'success' : 'danger'" size="small">
-            {{ modelscopeKeys.length }} 个可用
-          </el-tag>
-        </div>
-        <el-table :data="modelscopeKeys" stripe v-if="modelscopeKeys.length > 0">
-          <el-table-column prop="key_name" label="名称" width="180" />
-          <el-table-column prop="key_value" label="Key（已掩码）" />
-          <el-table-column prop="use_count" label="使用次数" width="100" />
-          <el-table-column prop="is_enabled" label="状态" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.is_enabled ? 'success' : 'info'" size="small">
-                {{ row.is_enabled ? '启用' : '禁用' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="180">
-            <template #default="{ row }">
-              <el-button link type="primary" size="small" @click="showEditDialog(row)">编辑</el-button>
-              <el-button link type="primary" size="small" @click="toggleKeyStatus(row)">
-                {{ row.is_enabled ? '禁用' : '启用' }}
+            <div class="key-list">
+              <div v-for="key in t8starKeys" :key="key.id" class="key-item">
+                <span class="key-name">{{ key.key_name }}</span>
+                <div class="key-input-wrap">
+                  <el-input
+                    v-model="key.inputValue"
+                    :placeholder="key.key_value || '输入新的 API Key'"
+                    show-password
+                    size="default"
+                  />
+                </div>
+                <div class="key-actions">
+                  <el-button
+                    type="success"
+                    :icon="Check"
+                    circle
+                    size="small"
+                    @click="saveKey(key)"
+                    :loading="key.saving"
+                    title="保存"
+                  />
+                  <el-button
+                    type="danger"
+                    :icon="Delete"
+                    circle
+                    size="small"
+                    @click="deleteKey(key)"
+                    title="删除"
+                  />
+                </div>
+              </div>
+
+              <!-- 添加新 Key -->
+              <div v-if="newT8starKey.visible" class="key-item key-item-new">
+                <span class="key-name">{{ newT8starKey.name }}</span>
+                <div class="key-input-wrap">
+                  <el-input
+                    v-model="newT8starKey.value"
+                    placeholder="输入 API Key"
+                    show-password
+                    size="default"
+                  />
+                </div>
+                <div class="key-actions">
+                  <el-button
+                    type="success"
+                    :icon="Check"
+                    circle
+                    size="small"
+                    @click="confirmAddKey('t8star')"
+                    :loading="newT8starKey.saving"
+                    title="保存"
+                  />
+                  <el-button
+                    type="info"
+                    :icon="Close"
+                    circle
+                    size="small"
+                    @click="cancelAddKey('t8star')"
+                    title="取消"
+                  />
+                </div>
+              </div>
+
+              <el-button
+                v-if="!newT8starKey.visible"
+                type="primary"
+                :icon="Plus"
+                size="small"
+                plain
+                @click="showAddKey('t8star')"
+              >
+                添加 Key
               </el-button>
-              <el-button link type="danger" size="small" @click="handleDeleteKey(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-else description="暂无 ModelScope API Key" :image-size="60" />
-      </div>
+            </div>
+          </div>
+        </el-col>
+
+        <!-- ModelScope Keys -->
+        <el-col :xs="24" :lg="12">
+          <div class="key-section">
+            <div class="key-section-header">
+              <span class="key-section-title">ModelScope</span>
+              <span class="key-section-desc">看图文案服务</span>
+              <el-tag :type="modelscopeKeys.length > 0 ? 'success' : 'danger'" size="small">
+                {{ modelscopeKeys.length }} 个
+              </el-tag>
+            </div>
+
+            <div class="key-list">
+              <div v-for="key in modelscopeKeys" :key="key.id" class="key-item">
+                <span class="key-name">{{ key.key_name }}</span>
+                <div class="key-input-wrap">
+                  <el-input
+                    v-model="key.inputValue"
+                    :placeholder="key.key_value || '输入新的 API Key'"
+                    show-password
+                    size="default"
+                  />
+                </div>
+                <div class="key-actions">
+                  <el-button
+                    type="success"
+                    :icon="Check"
+                    circle
+                    size="small"
+                    @click="saveKey(key)"
+                    :loading="key.saving"
+                    title="保存"
+                  />
+                  <el-button
+                    type="danger"
+                    :icon="Delete"
+                    circle
+                    size="small"
+                    @click="deleteKey(key)"
+                    title="删除"
+                  />
+                </div>
+              </div>
+
+              <!-- 添加新 Key -->
+              <div v-if="newModelscopeKey.visible" class="key-item key-item-new">
+                <span class="key-name">{{ newModelscopeKey.name }}</span>
+                <div class="key-input-wrap">
+                  <el-input
+                    v-model="newModelscopeKey.value"
+                    placeholder="输入 API Key"
+                    show-password
+                    size="default"
+                  />
+                </div>
+                <div class="key-actions">
+                  <el-button
+                    type="success"
+                    :icon="Check"
+                    circle
+                    size="small"
+                    @click="confirmAddKey('modelscope')"
+                    :loading="newModelscopeKey.saving"
+                    title="保存"
+                  />
+                  <el-button
+                    type="info"
+                    :icon="Close"
+                    circle
+                    size="small"
+                    @click="cancelAddKey('modelscope')"
+                    title="取消"
+                  />
+                </div>
+              </div>
+
+              <el-button
+                v-if="!newModelscopeKey.visible"
+                type="primary"
+                :icon="Plus"
+                size="small"
+                plain
+                @click="showAddKey('modelscope')"
+              >
+                添加 Key
+              </el-button>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
     </el-card>
-
-    <!-- 添加/编辑 API Key 弹窗 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="isEdit ? '编辑 API Key' : '添加 API Key'"
-      width="500px"
-    >
-      <el-form :model="keyForm" label-width="100px">
-        <el-form-item label="Provider">
-          <el-select v-model="keyForm.provider" placeholder="选择提供商" :disabled="isEdit">
-            <el-option label="T8Star（视频生成）" value="t8star" />
-            <el-option label="ModelScope（看图文案）" value="modelscope" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Key 名称">
-          <el-input v-model="keyForm.key_name" placeholder="如：t8star_key_1, modelscope_key_2" :disabled="isEdit" />
-        </el-form-item>
-        <el-form-item label="API Key">
-          <el-input
-            v-model="keyForm.key_value"
-            type="password"
-            show-password
-            placeholder="输入完整的 API Key"
-          />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="keyForm.description" placeholder="可选备注" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSaveKey" :loading="savingKey">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Check, Close, Plus, Delete } from '@element-plus/icons-vue'
 import request from '@/api/request'
 
 const formRef = ref(null)
 const loading = ref(false)
-const savingKey = ref(false)
-const dialogVisible = ref(false)
-const isEdit = ref(false)
 
 const form = reactive({
   signup_bonus: 10,
@@ -191,16 +267,40 @@ const form = reactive({
 })
 
 const apiKeys = ref([])
-const keyForm = reactive({
-  id: null,
-  provider: 't8star',
-  key_name: '',
-  key_value: '',
-  description: ''
+
+// 新增 Key 的临时状态
+const newT8starKey = reactive({
+  visible: false,
+  name: '',
+  value: '',
+  saving: false
+})
+
+const newModelscopeKey = reactive({
+  visible: false,
+  name: '',
+  value: '',
+  saving: false
 })
 
 const t8starKeys = computed(() => apiKeys.value.filter(k => k.provider === 't8star'))
 const modelscopeKeys = computed(() => apiKeys.value.filter(k => k.provider === 'modelscope'))
+
+// 生成 Key 名称（避免重复）
+const generateKeyName = (provider) => {
+  const keys = apiKeys.value.filter(k => k.provider === provider)
+  let maxNum = 0
+  const prefix = `${provider}_key_`
+  for (const k of keys) {
+    if (k.key_name && k.key_name.startsWith(prefix)) {
+      const num = parseInt(k.key_name.replace(prefix, ''), 10)
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num
+      }
+    }
+  }
+  return `${prefix}${maxNum + 1}`
+}
 
 // 加载配置
 const loadConfig = async () => {
@@ -219,7 +319,11 @@ const loadConfig = async () => {
 const loadAPIKeys = async () => {
   try {
     const res = await request.get('/admin/api-keys')
-    apiKeys.value = res
+    apiKeys.value = res.map(k => ({
+      ...k,
+      inputValue: '',
+      saving: false
+    }))
   } catch (error) {
     console.error(error)
   }
@@ -245,86 +349,88 @@ const handleSave = async () => {
   }
 }
 
-// 显示添加弹窗
-const showAddDialog = () => {
-  isEdit.value = false
-  keyForm.id = null
-  keyForm.provider = 't8star'
-  keyForm.key_name = ''
-  keyForm.key_value = ''
-  keyForm.description = ''
-  dialogVisible.value = true
-}
-
-// 显示编辑弹窗
-const showEditDialog = (row) => {
-  isEdit.value = true
-  keyForm.id = row.id
-  keyForm.provider = row.provider
-  keyForm.key_name = row.key_name
-  keyForm.key_value = '' // 编辑时不显示原值，需要重新输入
-  keyForm.description = row.description || ''
-  dialogVisible.value = true
-}
-
-// 保存 API Key
-const handleSaveKey = async () => {
-  if (!keyForm.key_name) {
-    return ElMessage.warning('请输入 Key 名称')
+// 显示添加 Key 输入框
+const showAddKey = (provider) => {
+  if (provider === 't8star') {
+    newT8starKey.visible = true
+    newT8starKey.name = generateKeyName('t8star')
+    newT8starKey.value = ''
+    newT8starKey.saving = false
+  } else {
+    newModelscopeKey.visible = true
+    newModelscopeKey.name = generateKeyName('modelscope')
+    newModelscopeKey.value = ''
+    newModelscopeKey.saving = false
   }
-  if (!isEdit.value && !keyForm.key_value) {
+}
+
+// 取消添加
+const cancelAddKey = (provider) => {
+  if (provider === 't8star') {
+    newT8starKey.visible = false
+    newT8starKey.value = ''
+  } else {
+    newModelscopeKey.visible = false
+    newModelscopeKey.value = ''
+  }
+}
+
+// 确认添加 Key
+const confirmAddKey = async (provider) => {
+  const keyData = provider === 't8star' ? newT8starKey : newModelscopeKey
+
+  if (!keyData.value) {
     return ElMessage.warning('请输入 API Key')
   }
 
-  savingKey.value = true
+  keyData.saving = true
   try {
-    if (isEdit.value) {
-      const updateData = { description: keyForm.description }
-      if (keyForm.key_value) {
-        updateData.key_value = keyForm.key_value
-      }
-      await request.put(`/admin/api-keys/${keyForm.id}`, updateData)
-      ElMessage.success('更新成功')
-    } else {
-      await request.post('/admin/api-keys', {
-        provider: keyForm.provider,
-        key_name: keyForm.key_name,
-        key_value: keyForm.key_value,
-        description: keyForm.description
-      })
-      ElMessage.success('添加成功')
-    }
-    dialogVisible.value = false
+    await request.post('/admin/api-keys', {
+      provider: provider,
+      key_name: keyData.name,
+      key_value: keyData.value,
+      description: ''
+    })
+    ElMessage.success('添加成功')
+    keyData.visible = false
+    keyData.value = ''
     loadAPIKeys()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || '操作失败')
+    ElMessage.error(error.response?.data?.detail || '添加失败')
   } finally {
-    savingKey.value = false
+    keyData.saving = false
   }
 }
 
-// 切换 Key 状态
-const toggleKeyStatus = async (row) => {
+// 保存 Key（更新）
+const saveKey = async (key) => {
+  if (!key.inputValue) {
+    return ElMessage.warning('请输入新的 API Key 值')
+  }
+
+  key.saving = true
   try {
-    await request.put(`/admin/api-keys/${row.id}`, {
-      is_enabled: !row.is_enabled
+    await request.put(`/admin/api-keys/${key.id}`, {
+      key_value: key.inputValue
     })
-    ElMessage.success(row.is_enabled ? '已禁用' : '已启用')
+    ElMessage.success('更新成功')
     loadAPIKeys()
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error(error.response?.data?.detail || '更新失败')
+  } finally {
+    key.saving = false
   }
 }
 
 // 删除 Key
-const handleDeleteKey = async (row) => {
+const deleteKey = async (key) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除 "${row.key_name}" 吗？`,
+      `确定要删除 "${key.key_name}" 吗？`,
       '确认删除',
       { type: 'warning' }
     )
-    await request.delete(`/admin/api-keys/${row.id}`)
+    await request.delete(`/admin/api-keys/${key.id}`)
     ElMessage.success('删除成功')
     loadAPIKeys()
   } catch (error) {
@@ -341,22 +447,113 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.system-config {
+  padding: 0;
+}
+
+.config-form {
+  max-width: 800px;
+}
+
+.form-tip {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.api-keys-card {
+  margin-top: 20px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .key-section {
   background: #f5f7fa;
   border-radius: 8px;
   padding: 16px;
+  height: 100%;
+  min-height: 200px;
 }
 
 .key-section-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .key-section-title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
   color: #303133;
+}
+
+.key-section-desc {
+  font-size: 12px;
+  color: #909399;
+}
+
+.key-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.key-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e4e7ed;
+  flex-wrap: wrap;
+}
+
+.key-item-new {
+  border: 1px dashed #409eff;
+  background: #ecf5ff;
+}
+
+.key-name {
+  min-width: 120px;
+  font-size: 13px;
+  color: #606266;
+  font-family: monospace;
+}
+
+.key-input-wrap {
+  flex: 1;
+  min-width: 200px;
+}
+
+.key-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .key-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .key-name {
+    min-width: auto;
+  }
+
+  .key-input-wrap {
+    width: 100%;
+  }
+
+  .key-actions {
+    align-self: flex-end;
+  }
 }
 </style>

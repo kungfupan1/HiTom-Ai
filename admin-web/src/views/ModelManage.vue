@@ -269,5 +269,22 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  :deep(.el-table) {
+    font-size: 13px;
+  }
+
+  :deep(.el-table .el-button) {
+    padding: 4px 8px;
+  }
 }
 </style>
