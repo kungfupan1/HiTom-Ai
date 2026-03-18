@@ -78,13 +78,13 @@ module.exports = async (req, res) => {
     }
 
     // 返回结果
-    const imageUrl = result.data?.[0]?.url
+    const images = result.data?.map(item => item.url) || []
 
-    console.log(`[generate-image] Success`)
+    console.log(`[generate-image] Success, ${images.length} images`)
 
     return res.status(200).json({
       status: 'success',
-      url: imageUrl,
+      images: images,
       deduction_id
     })
 

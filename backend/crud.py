@@ -20,6 +20,27 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
+def get_all_users(db: Session, keyword: str = None, page: int = 1, page_size: int = 20) -> tuple:
+    """获取用户列表"""
+    query = db.query(User)
+    if keyword:
+        query = query.filter(User.username.contains(keyword))
+    total = query.count()
+    users = query.order_by(User.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return users, total
+
+
+def toggle_user_status(db: Session, user_id: int) -> Optional[User]:
+    """切换用户状态（封禁/解封）"""
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.is_active = 0 if user.is_active == 1 else 1
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def create_user(db: Session, username: str, password_hash: str, signup_bonus: int = 10) -> User:
     user = User(
         username=username,
@@ -318,5 +339,6 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
     return {
         "signup_bonus": int(config_map.get("signup_bonus", "10")),
         "image_base_price": int(config_map.get("image_base_price", "2")),
-        "pricing_description": config_map.get("pricing_description", "")
+        "pricing_description": config_map.get("pricing_description", ""),
+        "vercel_url": config_map.get("vercel_url", "")
     }

@@ -130,7 +130,7 @@
       "编辑模型页面（含所有配置项）",
       "模型启用/禁用开关"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 12,
@@ -142,7 +142,7 @@
       "比例加价配置（可选）",
       "费用说明富文本编辑器"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 13,
@@ -154,7 +154,7 @@
       "费用说明展示配置",
       "保存按钮和成功提示"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 14,
@@ -167,7 +167,7 @@
       "显示费用说明（从后台获取）",
       "请求地址改为 Vercel Functions"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 15,
@@ -179,7 +179,7 @@
       "实时计算并显示费用",
       "请求地址改为 Vercel Functions"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 16,
@@ -191,7 +191,7 @@
       "确认后调用积分检查接口",
       "积分不足时提示充值"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 17,
@@ -203,7 +203,7 @@
       "新增积分预扣和确认接口",
       "新增 deduction_id 机制防止重复扣费"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 18,
@@ -215,7 +215,7 @@
       "POST /api/points/refund - 退还积分",
       "定时任务清理超时未确认的预扣"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 19,
@@ -227,7 +227,7 @@
       "测试视频生成完整流程",
       "测试积分扣费和退还"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 20,
@@ -239,6 +239,6 @@
       "编写数据库初始化脚本",
       "编写 API 接口文档"
     ],
-    "passes": false
+    "passes": true
   }
 ]

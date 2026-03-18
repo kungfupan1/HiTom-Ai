@@ -2,18 +2,21 @@
 初始化数据库和默认数据
 运行方式：python init_db.py
 """
+import sys
+sys.stdout.reconfigure(encoding='utf-8')
+
 from database import engine, SessionLocal
 from models import Base, AIModel, ModelPricing, SystemConfig
 
 # 创建表
 Base.metadata.create_all(bind=engine)
-print("✅ 数据库表已创建")
+print("[OK] 数据库表已创建")
 
 db = SessionLocal()
 
 # 检查是否已有数据
 if db.query(AIModel).count() > 0:
-    print("⚠️ 数据库已有数据，跳过初始化")
+    print("[WARN] 数据库已有数据，跳过初始化")
     db.close()
     exit(0)
 
@@ -214,7 +217,7 @@ nanobanana_pricing = [
 ]
 db.add_all(nanobanana_pricing)
 
-print("✅ 默认模型已添加")
+print("[OK] 默认模型已添加")
 
 # ============ 添加系统配置 ============
 configs = [
@@ -224,7 +227,7 @@ configs = [
 ]
 db.add_all(configs)
 
-print("✅ 系统配置已添加")
+print("[OK] 系统配置已添加")
 
 # ============ 添加管理员账号 ============
 from utils import hash_password
@@ -238,9 +241,9 @@ admin = User(
 )
 db.add(admin)
 
-print("✅ 管理员账号已添加 (admin / admin123)")
+print("[OK] 管理员账号已添加 (admin / admin123)")
 
 db.commit()
 db.close()
 
-print("\n🎉 数据库初始化完成！")
+print("\n[DONE] 数据库初始化完成！")

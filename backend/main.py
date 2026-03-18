@@ -56,7 +56,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user = crud.get_user_by_id(db, payload.get("sub"))
+    user = crud.get_user_by_id(db, int(payload.get("sub")))
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -80,7 +80,7 @@ async def get_current_admin(current_user = Depends(get_current_user)):
 @app.on_event("startup")
 async def startup_event():
     init_db()
-    print("🚀 Hi-Tom-AI Backend 已启动")
+    print("[OK] Hi-Tom-AI Backend started")
 
 
 # ============ 健康检查 ============
@@ -92,6 +92,28 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/admin/stats")
+async def admin_get_stats(
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员获取统计数据"""
+    from models import User, AIModel, APILog
+    from sqlalchemy import func
+
+    user_count = db.query(func.count(User.id)).scalar()
+    model_count = db.query(func.count(AIModel.id)).filter(AIModel.is_enabled == True).scalar()
+    video_count = db.query(func.count(APILog.id)).filter(APILog.task_type == 'video').scalar() or 0
+    image_count = db.query(func.count(APILog.id)).filter(APILog.task_type == 'image').scalar() or 0
+
+    return {
+        "userCount": user_count,
+        "modelCount": model_count,
+        "videoCount": video_count,
+        "imageCount": image_count
+    }
 
 
 # ============ 认证接口 ============
@@ -126,7 +148,7 @@ async def login(
     if user.is_active == 0:
         raise HTTPException(status_code=403, detail="账号已被封禁")
 
-    token = create_access_token(data={"sub": user.id})
+    token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -162,6 +184,34 @@ async def get_model_detail(
 
 
 # ============ 管理员接口 ============
+@app.get("/admin/users")
+async def admin_get_users(
+    keyword: Optional[str] = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员获取用户列表"""
+    users, total = crud.get_all_users(db, keyword, page)
+    return {
+        "items": [{"id": u.id, "username": u.username, "points": u.points, "role": u.role, "is_active": u.is_active, "create_time": u.create_time} for u in users],
+        "total": total
+    }
+
+
+@app.post("/admin/users/{user_id}/toggle-status")
+async def admin_toggle_user_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员封禁/解封用户"""
+    user = crud.toggle_user_status(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return {"status": "success", "is_active": user.is_active}
+
+
 @app.get("/admin/models", response_model=List[schemas.AIModelResponse])
 async def admin_get_models(
     db: Session = Depends(get_db),

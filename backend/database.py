@@ -32,4 +32,4 @@ def init_db():
     """初始化数据库"""
     from models import Base
     Base.metadata.create_all(bind=engine)
-    print("✅ 数据库初始化完成")
+    print("[OK] Database initialized")

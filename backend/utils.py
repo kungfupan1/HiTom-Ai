@@ -41,7 +41,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def decode_token(token: str) -> Optional[dict]:
     """解码 JWT Token"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        # Disable sub verification since we store user ID as integer
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={'verify_sub': False})
         return payload
     except JWTError:
         return None
