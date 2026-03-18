@@ -10,7 +10,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# lib/ folder in Python build, but not vercel-api/lib
+# lib/
 lib64/
 parts/
 sdist/

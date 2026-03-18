@@ -2,6 +2,8 @@
  * 工具函数 - Provider 参数映射引擎
  */
 
+const { getT8StarKey, getModelScopeKey } = require('./api-key-fetcher')
+
 /**
  * 参数映射配置
  * 定义前端参数到 API 参数的映射规则
@@ -161,7 +163,7 @@ function extractResponseData(response, mapping) {
 }
 
 /**
- * 获取 API Key
+ * 获取 API Key（同步版本，仅从环境变量获取，用于兼容）
  * @param {string} provider - 服务商名称
  * @returns {string} - API Key
  */
@@ -173,11 +175,26 @@ function getApiKey(provider) {
   return keys[provider] || process.env.T8STAR_API_KEY
 }
 
+/**
+ * 获取 API Key（异步版本，支持从后端数据库获取）
+ * @param {string} provider - 服务商名称
+ * @returns {Promise<string>} - API Key
+ */
+async function getApiKeyAsync(provider) {
+  if (provider === 't8star') {
+    return await getT8StarKey()
+  } else if (provider === 'modelscope') {
+    return await getModelScopeKey()
+  }
+  return await getT8StarKey()
+}
+
 module.exports = {
   PARAM_MAPPINGS,
   STATUS_MAPPINGS,
   mapRequestParams,
   mapResponseStatus,
   extractResponseData,
-  getApiKey
+  getApiKey,
+  getApiKeyAsync
 }

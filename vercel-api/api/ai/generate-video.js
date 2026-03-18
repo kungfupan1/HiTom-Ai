@@ -5,6 +5,7 @@
  */
 
 const fetch = require('node-fetch')
+const { getT8StarKey } = require('../../lib/api-key-fetcher')
 
 // 不同模型的参数配置
 const MODEL_CONFIGS = {
@@ -51,12 +52,14 @@ module.exports = async (req, res) => {
       })
     }
 
-    // 获取 API Key
-    const apiKey = process.env.T8STAR_API_KEY
-    if (!apiKey) {
+    // 获取 API Key - 支持从后端数据库获取（负载均衡）
+    let apiKey
+    try {
+      apiKey = await getT8StarKey()
+    } catch (e) {
       return res.status(500).json({
         status: 'error',
-        message: 'T8STAR_API_KEY 未配置'
+        message: e.message || 'API Key 获取失败'
       })
     }
 

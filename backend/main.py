@@ -398,6 +398,124 @@ async def admin_recharge(
     return {"status": "success", "new_balance": user.points}
 
 
+# ============ API Key 管理接口 ============
+@app.get("/admin/api-keys", response_model=List[schemas.APIKeyResponse])
+async def admin_get_api_keys(
+    provider: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员获取 API Key 列表"""
+    keys = crud.get_all_api_keys(db, provider)
+    # 掩码处理 key_value，只显示前6位和后4位
+    result = []
+    for key in keys:
+        key_dict = {
+            "id": key.id,
+            "key_name": key.key_name,
+            "key_value": mask_api_key(key.key_value),
+            "provider": key.provider,
+            "is_enabled": key.is_enabled,
+            "description": key.description,
+            "use_count": key.use_count,
+            "last_used_time": key.last_used_time,
+            "create_time": key.create_time,
+            "update_time": key.update_time
+        }
+        result.append(key_dict)
+    return result
+
+
+def mask_api_key(key: str) -> str:
+    """掩码处理 API Key"""
+    if not key or len(key) < 10:
+        return "****"
+    return f"{key[:6]}...{key[-4:]}"
+
+
+@app.post("/admin/api-keys", response_model=schemas.APIKeyResponse)
+async def admin_create_api_key(
+    key_data: schemas.APIKeyCreate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员创建 API Key"""
+    existing = crud.get_api_key_by_name(db, key_data.key_name)
+    if existing:
+        raise HTTPException(status_code=400, detail="Key 名称已存在")
+
+    key = crud.create_api_key(db, key_data.key_name, key_data.key_value, key_data.provider, key_data.description)
+    return {
+        "id": key.id,
+        "key_name": key.key_name,
+        "key_value": mask_api_key(key.key_value),
+        "provider": key.provider,
+        "is_enabled": key.is_enabled,
+        "description": key.description,
+        "use_count": key.use_count,
+        "last_used_time": key.last_used_time,
+        "create_time": key.create_time,
+        "update_time": key.update_time
+    }
+
+
+@app.put("/admin/api-keys/{key_id}", response_model=schemas.APIKeyResponse)
+async def admin_update_api_key(
+    key_id: int,
+    key_data: schemas.APIKeyUpdate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员更新 API Key"""
+    key = crud.update_api_key(db, key_id, key_data.key_value, key_data.is_enabled, key_data.description)
+    if not key:
+        raise HTTPException(status_code=404, detail="API Key 不存在")
+    return {
+        "id": key.id,
+        "key_name": key.key_name,
+        "key_value": mask_api_key(key.key_value),
+        "provider": key.provider,
+        "is_enabled": key.is_enabled,
+        "description": key.description,
+        "use_count": key.use_count,
+        "last_used_time": key.last_used_time,
+        "create_time": key.create_time,
+        "update_time": key.update_time
+    }
+
+
+@app.delete("/admin/api-keys/{key_id}")
+async def admin_delete_api_key(
+    key_id: int,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员删除 API Key"""
+    if not crud.delete_api_key(db, key_id):
+        raise HTTPException(status_code=404, detail="API Key 不存在")
+    return {"status": "success", "message": "API Key 已删除"}
+
+
+@app.get("/api/keys/{provider}")
+async def get_api_key_for_vercel(
+    provider: str,
+    secret: str = None,
+    db: Session = Depends(get_db)
+):
+    """获取 API Key（供 Vercel Functions 调用，需要 BACKEND_SECRET 认证）"""
+    from os import getenv
+
+    # 内部认证
+    backend_secret = getenv("BACKEND_SECRET", "hi-tom-ai-internal-secret")
+    if secret != backend_secret:
+        raise HTTPException(status_code=403, detail="认证失败")
+
+    key = crud.get_random_api_key(db, provider)
+    if not key:
+        raise HTTPException(status_code=404, detail=f"未找到 {provider} 的 API Key")
+    return {"key": key}
+
+
 # ============ 启动入口 ============
 if __name__ == "__main__":
     import uvicorn

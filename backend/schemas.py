@@ -191,3 +191,33 @@ class ErrorResponse(BaseModel):
     status: str = "error"
     message: str
     detail: Optional[str] = None
+
+
+# ============ API Key 相关 ============
+class APIKeyCreate(BaseModel):
+    key_name: str
+    key_value: str
+    provider: str  # t8star, modelscope
+    description: Optional[str] = None
+
+
+class APIKeyUpdate(BaseModel):
+    key_value: Optional[str] = None
+    is_enabled: Optional[bool] = None
+    description: Optional[str] = None
+
+
+class APIKeyResponse(BaseModel):
+    id: int
+    key_name: str
+    key_value: str  # 返回时会被掩码处理
+    provider: str
+    is_enabled: bool
+    description: Optional[str] = None
+    use_count: int = 0
+    last_used_time: Optional[datetime] = None
+    create_time: datetime
+    update_time: datetime
+
+    class Config:
+        from_attributes = True

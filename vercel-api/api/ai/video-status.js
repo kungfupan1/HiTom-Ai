@@ -4,7 +4,7 @@
  */
 
 const fetch = require('node-fetch')
-const { mapResponseStatus, getApiKey } = require('../lib/provider-mapper')
+const { mapResponseStatus, getApiKeyAsync } = require('../lib/provider-mapper')
 
 module.exports = async (req, res) => {
   // 处理 CORS
@@ -30,12 +30,14 @@ module.exports = async (req, res) => {
       })
     }
 
-    // 获取 API Key
-    const apiKey = getApiKey('t8star')
-    if (!apiKey) {
+    // 获取 API Key - 支持从后端数据库获取（负载均衡）
+    let apiKey
+    try {
+      apiKey = await getApiKeyAsync('t8star')
+    } catch (e) {
       return res.status(500).json({
         status: 'error',
-        message: 'API Key 未配置'
+        message: e.message || 'API Key 获取失败'
       })
     }
 

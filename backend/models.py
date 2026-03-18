@@ -127,3 +127,19 @@ class PointReserve(Base):
     status = Column(String(20), default="reserved")  # reserved/confirmed/refunded
     expire_time = Column(DateTime)  # 过期时间（超时自动退还）
     create_time = Column(DateTime, default=datetime.now)
+
+
+class APIKey(Base):
+    """API 密钥表"""
+    __tablename__ = "api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key_name = Column(String(50), nullable=False)  # t8star_api_key, modelscope_api_key_1, etc.
+    key_value = Column(String(255), nullable=False)  # 实际的 API Key
+    provider = Column(String(50), nullable=False)  # t8star, modelscope
+    is_enabled = Column(Boolean, default=True)
+    description = Column(String(255))
+    last_used_time = Column(DateTime)  # 最后使用时间
+    use_count = Column(Integer, default=0)  # 使用次数
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)

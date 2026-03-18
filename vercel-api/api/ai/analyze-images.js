@@ -5,6 +5,7 @@
  */
 
 const fetch = require('node-fetch')
+const { getModelScopeKey } = require('../../lib/api-key-fetcher')
 
 // 语言映射
 const LANG_MAP = {
@@ -46,12 +47,14 @@ module.exports = async (req, res) => {
       })
     }
 
-    // 获取 API Key - 使用 ModelScope API
-    const apiKey = process.env.MODELSCOPE_API_KEY
-    if (!apiKey) {
+    // 获取 API Key - 支持从后端数据库获取（负载均衡）
+    let apiKey
+    try {
+      apiKey = await getModelScopeKey()
+    } catch (e) {
       return res.status(500).json({
         status: 'error',
-        message: 'MODELSCOPE_API_KEY 未配置'
+        message: e.message || 'API Key 获取失败'
       })
     }
 
