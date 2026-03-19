@@ -36,7 +36,7 @@ export const getPricingInfo = () => {
 }
 
 // Vercel Functions API（需要配置 Vercel URL）
-const VERCEL_URL = 'https://hi-tom-ai-y15y.vercel.app' // 在系统配置中设置
+const VERCEL_URL = 'https://vercel-api-phi-nine.vercel.app'
 
 // 生成视频
 export const generateVideo = async (data) => {
