@@ -40,14 +40,12 @@
 
         <el-divider content-position="left">服务配置</el-divider>
 
-        <el-form-item label="Vercel URL">
+        <el-form-item label="腾讯云函数 URL">
           <el-input
-            v-model="form.vercel_url"
-            placeholder="https://your-app.vercel.app"
-          >
-            <template #prepend>https://</template>
-          </el-input>
-          <div class="form-tip">AI 生成服务的 Vercel Functions 地址，必须配置才能使用 AI 功能</div>
+            v-model="form.tencent_function_url"
+            placeholder="https://xxx.ap-guangzhou.tencentscf.com"
+          />
+          <div class="form-tip">AI 生成服务的腾讯云函数地址，必须配置才能使用 AI 功能</div>
         </el-form-item>
 
         <el-form-item>
@@ -263,7 +261,7 @@ const form = reactive({
   signup_bonus: 10,
   image_base_price: 2,
   pricing_description: '',
-  vercel_url: ''
+  tencent_function_url: ''
 })
 
 const apiKeys = ref([])
@@ -309,7 +307,7 @@ const loadConfig = async () => {
     form.signup_bonus = parseInt(res.signup_bonus?.value || '10')
     form.image_base_price = parseInt(res.image_base_price?.value || '2')
     form.pricing_description = res.pricing_description?.value || ''
-    form.vercel_url = res.vercel_url?.value || ''
+    form.tencent_function_url = res.tencent_function_url?.value || ''
   } catch (error) {
     console.error(error)
   }
@@ -338,7 +336,7 @@ const handleSave = async () => {
         signup_bonus: String(form.signup_bonus),
         image_base_price: String(form.image_base_price),
         pricing_description: form.pricing_description,
-        vercel_url: form.vercel_url
+        tencent_function_url: form.tencent_function_url
       }
     })
     ElMessage.success('保存成功')
