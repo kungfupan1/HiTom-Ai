@@ -4,7 +4,7 @@
  */
 
 const fetch = require('node-fetch')
-const { getApiKeyAsync } = require('../lib/provider-mapper')
+const { getApiKeyAsync } = require('../../lib/provider-mapper')
 
 module.exports = async (req, res) => {
   // 处理 CORS
