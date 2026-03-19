@@ -1,0 +1,91 @@
+Resources:
+  # API 网关配置
+  HiTomAPI:
+    Type: TencentCloud::Serverless::Api
+    Properties:
+      StageName: release
+      ServiceName: hi-tom-ai
+      Description: Hi-Tom-AI API Gateway
+      Protocols:
+        - http
+        - https
+
+  # 看图生成文案
+  AnalyzeImages:
+    Type: TencentCloud::Serverless::Function
+    Properties:
+      CodeUri: ./functions/analyze-images
+      Handler: index.main_handler
+      Runtime: Nodejs16.13
+      Timeout: 120
+      MemorySize: 256
+      Environment:
+        Variables:
+          MODELSCOPE_API_KEY: ${MODELSCOPE_API_KEY}
+      Events:
+        APIEvent:
+          Type: API
+          Properties:
+            Path: /api/ai/analyze-images
+            Method: POST
+            RestApiId: HiTomAPI
+
+  # 视频生成
+  GenerateVideo:
+    Type: TencentCloud::Serverless::Function
+    Properties:
+      CodeUri: ./functions/generate-video
+      Handler: index.main_handler
+      Runtime: Nodejs16.13
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          T8STAR_API_KEY: ${T8STAR_API_KEY}
+      Events:
+        APIEvent:
+          Type: API
+          Properties:
+            Path: /api/ai/generate-video
+            Method: POST
+            RestApiId: HiTomAPI
+
+  # 视频状态查询
+  VideoStatus:
+    Type: TencentCloud::Serverless::Function
+    Properties:
+      CodeUri: ./functions/video-status
+      Handler: index.main_handler
+      Runtime: Nodejs16.13
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          T8STAR_API_KEY: ${T8STAR_API_KEY}
+      Events:
+        APIEvent:
+          Type: API
+          Properties:
+            Path: /api/ai/video-status
+            Method: GET
+            RestApiId: HiTomAPI
+
+  # 图片生成
+  GenerateImage:
+    Type: TencentCloud::Serverless::Function
+    Properties:
+      CodeUri: ./functions/generate-image
+      Handler: index.main_handler
+      Runtime: Nodejs16.13
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          T8STAR_API_KEY: ${T8STAR_API_KEY}
+      Events:
+        APIEvent:
+          Type: API
+          Properties:
+            Path: /api/ai/generate-image
+            Method: POST
+            RestApiId: HiTomAPI
