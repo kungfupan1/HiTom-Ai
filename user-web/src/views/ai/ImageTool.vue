@@ -159,6 +159,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, InfoFilled } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
+import { generateImage } from '@/api/index'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 
@@ -283,28 +284,22 @@ const handleGenerate = async () => {
     })
     deductionId = reserveRes.deduction_id
 
-    // 2. 获取 Vercel URL
-    const configRes = await request.get('/api/config/pricing-info')
-    const vercelUrl = configRes.vercel_url || ''
-
-    // 3. 调用 Vercel Functions 生成图片
+    // 2. 调用图片生成 API（使用占位符模式）
     ElMessage.info('正在生成图片，请稍候...')
-    const imageRes = await request.post(`${vercelUrl}/api/ai/generate-image`, {
+    const imageRes = await generateImage({
       model: form.model,
       prompt: form.prompt,
-      ratio: form.ratio,
-      resolution: form.resolution,
-      n: form.count,
-      deduction_id: deductionId
+      size: form.resolution,
+      images: []
     })
 
-    // 4. 确认扣费
+    // 3. 确认扣费
     await request.post('/api/points/confirm', { deduction_id: deductionId })
 
-    // 5. 刷新积分
+    // 4. 刷新积分
     userStore.refreshPoints()
 
-    // 6. 显示结果
+    // 5. 显示结果
     const images = imageRes.images || imageRes.data?.map(d => d.url) || []
     generatedImages.value = [...images, ...generatedImages.value]
 
@@ -320,7 +315,7 @@ const handleGenerate = async () => {
       } catch (e) {}
     }
     console.error('生成失败:', error)
-    ElMessage.error(error.response?.data?.detail || '图片生成失败')
+    ElMessage.error(error.response?.data?.detail || error.message || '图片生成失败')
   } finally {
     generating.value = false
   }

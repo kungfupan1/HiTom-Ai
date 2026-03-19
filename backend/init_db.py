@@ -224,6 +224,7 @@ configs = [
     SystemConfig(key="signup_bonus", value="10", description="注册赠送积分"),
     SystemConfig(key="image_base_price", value="2", description="图片生成基础费用"),
     SystemConfig(key="pricing_description", value="费用说明：\n• 图片生成：2积分/张\n• 视频生成：按时长计费\n• 高清模式：额外加价", description="费用说明展示文字"),
+    SystemConfig(key="tencent_function_url", value="https://1307708790-dpjcghai7x.ap-guangzhou.tencentscf.com", description="腾讯云函数URL"),
 ]
 db.add_all(configs)
 

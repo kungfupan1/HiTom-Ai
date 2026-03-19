@@ -232,6 +232,7 @@
 import { Plus, MagicStick } from '@element-plus/icons-vue'
 import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import request from '@/api/request'
+import { analyzeImages as analyzeImagesAPI, generateVideo, getVideoStatus } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
@@ -370,20 +371,11 @@ const analyzeImages = async () => {
   emit('log', '开始分析图片...')
 
   try {
-    // 获取 Vercel URL
-    const configRes = await request.get('/api/config/pricing-info')
-    const vercelUrl = configRes.vercel_url || ''
-
-    emit('log', `Vercel URL: ${vercelUrl || '(未配置)'}`)
     emit('log', `上传图片数: ${imageBase64List.value.length}`)
-
-    if (!vercelUrl) {
-      throw new Error('Vercel URL 未配置，请联系管理员')
-    }
-
-    // 调用看图生成文案接口
     emit('log', '正在调用 AI 分析图片...')
-    const res = await request.post(`${vercelUrl}/api/ai/analyze-images`, {
+
+    // 调用新的 API（使用占位符模式）
+    const res = await analyzeImagesAPI({
       images: imageBase64List.value,
       product_type: form.product_type || '产品',
       design_style: form.style || '现代简约',
@@ -391,10 +383,13 @@ const analyzeImages = async () => {
       target_num: 1
     })
 
-    emit('log', `API 返回状态: ${res.status}`)
+    emit('log', `API 返回状态: success`)
 
-    if (res.status === 'success' && res.content) {
-      form.selling_points = res.content
+    // 提取内容
+    let content = res.choices?.[0]?.message?.content || res.content || ''
+    if (content) {
+      content = content.replace(/\*\*/g, '').replace(/##/g, '')
+      form.selling_points = content
       ElMessage.success('文案生成成功！')
       emit('log', '文案生成成功！')
     } else {
@@ -450,40 +445,34 @@ const submitTask = async () => {
     deductionId = reserveRes.deduction_id
     emit('log', `预扣成功，deduction_id: ${deductionId}`)
 
-    // 2. 获取 Vercel URL
-    const configRes = await request.get('/api/config/pricing-info')
-    const vercelUrl = configRes.vercel_url || ''
-    emit('log', `Vercel URL: ${vercelUrl}`)
-
-    // 3. 构建提示词
+    // 2. 构建提示词
     const prompt = `产品: ${form.product_type}\n卖点: ${form.selling_points}\n风格: ${form.style}\n类目: ${form.category}\n语言: ${form.language}\n地区: ${form.region}`
 
-    // 4. 调用 Vercel Functions 生成视频
+    // 3. 调用视频生成 API（使用占位符模式）
     emit('log', `步骤2: 调用 ${form.model} 生成视频...`)
-    const videoRes = await request.post(`${vercelUrl}/api/ai/generate-video`, {
+    const videoRes = await generateVideo({
       model: form.model,
       prompt: prompt,
       duration: form.duration,
       ratio: form.aspect_ratio,
       resolution: form.resolution,
-      images: imageBase64List.value,
-      deduction_id: deductionId
+      images: imageBase64List.value
     })
 
     taskId.value = videoRes.task_id
     emit('log', `任务已提交，task_id: ${taskId.value}`)
 
-    // 5. 确认扣费
+    // 4. 确认扣费
     await request.post('/api/points/confirm', { deduction_id: deductionId })
     emit('log', '积分扣费已确认')
 
-    // 6. 刷新积分
+    // 5. 刷新积分
     userStore.refreshPoints()
     emit('refresh-points')
 
-    // 7. 开始轮询状态
+    // 6. 开始轮询状态
     emit('log', '开始轮询生成状态...')
-    startStatusPolling(vercelUrl)
+    startStatusPolling()
 
     ElMessage.success('视频生成任务已提交')
   } catch (e) {
@@ -507,24 +496,24 @@ const submitTask = async () => {
 // 状态轮询
 let statusTimer = null
 
-const startStatusPolling = (vercelUrl) => {
+const startStatusPolling = () => {
   stopStatusPolling()
   statusTimer = setInterval(async () => {
     try {
-      const res = await request.get(`${vercelUrl}/api/ai/video-status?task_id=${taskId.value}&model=${form.model}`)
+      const res = await getVideoStatus(taskId.value, form.model)
 
       const status = res.status
       const prog = res.progress || 0
       progress.value = Math.min(99, parseInt(prog))
 
-      if (status === 'SUCCESS') {
+      if (status === 'SUCCESS' || status === 'success') {
         clearInterval(statusTimer)
         progress.value = 100
         videoUrl.value = res.video_url
         taskStatus.value = 'success'
         loading.value = false
         ElMessage.success('视频生成完成！')
-      } else if (status === 'FAILURE') {
+      } else if (status === 'FAILURE' || status === 'failed') {
         clearInterval(statusTimer)
         taskStatus.value = 'fail'
         loading.value = false

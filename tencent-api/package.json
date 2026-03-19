@@ -1,9 +1,0 @@
-{
-  "name": "hi-tom-ai-tencent",
-  "version": "1.0.0",
-  "description": "Hi-Tom-AI 腾讯云函数",
-  "dependencies": {
-    "axios": "^1.6.0",
-    "tencentcloud-sdk-nodejs": "^4.0.0"
-  }
-}

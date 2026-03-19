@@ -1,94 +1,80 @@
 /**
- * 看图生成文案 API
- * 腾讯云 Web 函数版本 (Express)
+ * 看图生成文案 API - 腾讯云 Web 函数 (终极防崩溃版)
  */
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
 
-const express = require('express')
-const cors = require('cors')
-const axios = require('axios')
+// 1. 全局拦截致命异常，防止 Node 进程静默崩溃导致 502
+process.on('uncaughtException', (err) => {
+  console.error('=== 致命错误拦截: Uncaught Exception ===', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('=== 致命错误拦截: Unhandled Rejection ===', reason);
+});
 
-const app = express()
+const app = express();
 
-// 中间件
-app.use(cors())
-app.use(express.json({ limit: '50mb' }))
-app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// API Key
-const MODELSCOPE_API_KEY = process.env.MODELSCOPE_API_KEY || ''
+const MODELSCOPE_API_KEY = process.env.MODELSCOPE_API_KEY || '';
 
-function getModelScopeKey() {
-  if (!MODELSCOPE_API_KEY) throw new Error('MODELSCOPE_API_KEY 未配置')
-  return MODELSCOPE_API_KEY
-}
-
-// 语言映射
-const LANG_MAP = {
-  "中文": "Chinese", "简体中文": "Simplified Chinese", "繁体中文": "Traditional Chinese",
-  "英语": "English", "英文": "English",
-  "日语": "Japanese", "日文": "Japanese",
-  "韩语": "Korean", "韩文": "Korean",
-  "法语": "French", "德语": "German", "俄语": "Russian",
-  "西班牙语": "Spanish", "葡萄牙语": "Portuguese", "意大利语": "Italian",
-  "荷兰语": "Dutch", "波兰语": "Polish", "瑞典语": "Swedish",
-  "越南语": "Vietnamese", "泰语": "Thai", "印尼语": "Indonesian",
-  "马来语": "Malay", "菲律宾语": "Filipino", "印地语": "Hindi",
-  "阿拉伯语": "Arabic", "土耳其语": "Turkish"
-}
-
-// 健康检查 (腾讯云必须用这个来判断服务是否存活)
+// 健康检查接口 - 用于测试服务器是否存活
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'analyze-images' })
-})
+  console.log('[GET /] 收到健康检查请求，服务器存活！');
+  res.json({ status: 'ok', message: 'Web function is perfectly alive!' });
+});
 
 // 主接口
 app.post('/api/ai/analyze-images', async (req, res) => {
+  console.log('[POST /api/ai/analyze-images] 收到请求，准备处理...');
   try {
-    const { images, product_type, design_style, target_lang, target_num } = req.body
+    const { images, product_type, design_style, target_lang, target_num } = req.body;
 
     if (!images || images.length === 0) {
-      return res.status(400).json({ status: 'error', message: '缺少图片数据' })
+      console.log('拦截：缺少图片数据');
+      return res.status(400).json({ status: 'error', message: '缺少图片数据' });
     }
 
-    const apiKey = getModelScopeKey()
-    const productType = product_type || '通用产品'
-    const designStyle = design_style || '现代简约'
-    const targetLang = LANG_MAP[target_lang] || 'Chinese'
-    const targetNum = target_num || 1
-
-    const formatParts = []
-    for (let i = 1; i <= targetNum; i++) {
-      formatParts.push(`Set ${i}:\nMain Title: ...\nSubtitle: ...`)
+    if (!MODELSCOPE_API_KEY) {
+      console.log('拦截：未配置 MODELSCOPE_API_KEY');
+      return res.status(500).json({ status: 'error', message: '请在云函数环境变量中配置 MODELSCOPE_API_KEY' });
     }
-    const formatExample = formatParts.join('\n\n')
+
+    const targetLangStr = target_lang || 'Chinese';
+    const targetNumInt = target_num || 1;
+    const productType = product_type || '通用产品';
+    const designStyle = design_style || '现代简约';
+
+    const formatParts = [];
+    for (let i = 1; i <= targetNumInt; i++) {
+      formatParts.push(`Set ${i}:\nMain Title: ...\nSubtitle: ...`);
+    }
 
     const promptText = `
-[Role] Senior E-commerce Copywriter specialized in **${targetLang}**.
+[Role] Senior E-commerce Copywriter specialized in **${targetLangStr}**.
 [Input Info]
 - Product Category: ${productType}
 - Desired Style: ${designStyle}
-- **TARGET LANGUAGE: ${targetLang}**
+- **TARGET LANGUAGE: ${targetLangStr}**
 [Task]
-Analyze these product images. Combine visual features with "${productType}" to write catchy 'Main Title' and 'Subtitle'.
+Analyze these product images. Write catchy 'Main Title' and 'Subtitle'.
 [Requirement]
-Generate exactly **${targetNum} distinct sets**.
-[CRITICAL RULES]
-1. **OUTPUT MUST BE IN ${targetLang}**.
-2. Do NOT use English unless the target language is English.
-3. Even if the input is Chinese/English, translate your thoughts to **${targetLang}**.
+Generate exactly **${targetNumInt} distinct sets**.
 [Format]:
-${formatExample}
-(Direct output only. Language: ${targetLang})
-`
+${formatParts.join('\n\n')}
+`;
 
-    const contentList = [{ type: 'text', text: promptText }]
-    const validImages = images.filter(img => img).slice(0, 3)
+    const contentList = [{ type: 'text', text: promptText }];
+    const validImages = images.filter(img => img).slice(0, 3);
     for (const imgBase64 of validImages) {
-      let imgUrl = imgBase64
+      let imgUrl = imgBase64;
       if (!imgBase64.startsWith('data:image')) {
-        imgUrl = `data:image/jpeg;base64,${imgBase64}`
+        imgUrl = `data:image/jpeg;base64,${imgBase64}`;
       }
-      contentList.push({ type: 'image_url', image_url: { url: imgUrl } })
+      contentList.push({ type: 'image_url', image_url: { url: imgUrl } });
     }
 
     const payload = {
@@ -96,39 +82,50 @@ ${formatExample}
       messages: [{ role: 'user', content: contentList }],
       max_tokens: 1500,
       temperature: 0.7
-    }
+    };
+
+    console.log('[analyze-images] 参数组装完毕，开始调用 ModelScope API...');
 
     const response = await axios.post(
       'https://api-inference.modelscope.cn/v1/chat/completions',
       payload,
       {
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${MODELSCOPE_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        timeout: 110000 // 留一点余量给云函数
+        timeout: 110000
       }
-    )
+    );
 
-    let content = response.data.choices[0].message.content.trim()
-    content = content.replace(/\*\*/g, '').replace(/##/g, '')
+    console.log('[analyze-images] API 调用成功！');
+    let content = response.data.choices[0].message.content.trim();
+    content = content.replace(/\*\*/g, '').replace(/##/g, '');
 
-    res.json({ status: 'success', content })
+    res.json({ status: 'success', content });
 
   } catch (err) {
+    console.error('[analyze-images] 请求处理过程中发生报错:', err.message);
     if (err.response) {
+      console.error('ModelScope API 返回了详细报错:', JSON.stringify(err.response.data));
       return res.status(err.response.status || 500).json({
         status: 'error',
         message: err.response.data?.error?.message || 'API 请求失败',
         detail: err.response.data
-      })
+      });
     }
-    res.status(500).json({ status: 'error', message: err.message || '服务器错误' })
+    res.status(500).json({ status: 'error', message: err.message || '服务器错误' });
   }
-})
+});
 
-// 【核心修复】必须监听 9000 端口，腾讯云 Web 函数才能正常工作
-const port = 9000
-app.listen(port, () => {
-  console.log(`Web function is listening on port ${port}`)
-})
+const port = 9000;
+const server = app.listen(port, '0.0.0.0', () => {
+  console.log(`Web function is successfully listening on port ${port} at 0.0.0.0`);
+});
+
+// 2. 监听并打印底层的服务器运行错误（如端口被占用）
+server.on('error', (err) => {
+  console.error('=== 底层 Server 启动失败 ===', err);
+});
+
+// 3. 【极度关键】代码结束！绝对不要写 module.exports = app

@@ -4,26 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hi-Tom-AI is an AI e-commerce content generation platform that generates images and videos using AI services (T8Star, ModelScope). The architecture separates AI API calls (handled by Vercel Functions) from business logic (handled by FastAPI backend).
+Hi-Tom-AI is an AI e-commerce content generation platform that generates images and videos using AI services (T8Star, ModelScope). The architecture separates AI API calls (handled by Tencent Cloud Functions) from business logic (handled by FastAPI backend).
 
 ## Development Commands
 
 ```bash
 # Backend (FastAPI)
 cd backend && pip install -r requirements.txt
+cd backend && python init_db.py              # 初始化数据库
 cd backend && uvicorn main:app --reload --port 8000
 
-# Vercel API (AI proxy)
-cd vercel-api && npm install
-cd vercel-api && npm run dev           # vercel dev
-
 # User Frontend (Vue 3)
-cd user-web && npm install
-cd user-web && npm run dev             # port 8080
+cd user-web && npm install && npm run dev   # port 8080
 
 # Admin Frontend (Vue 3)
-cd admin-web && npm install
-cd admin-web && npm run dev            # port 8081
+cd admin-web && npm install && npm run dev  # port 8081
 ```
 
 ## Architecture
@@ -31,8 +26,8 @@ cd admin-web && npm run dev            # port 8081
 ```
 User Browser
     │
-    ├── AI requests ──────────→ Vercel Functions ──→ AI Provider (T8Star)
-    │   (image/video gen)         (stores API keys)
+    ├── AI requests ──────────→ Tencent Cloud Functions ──→ AI Provider
+    │   (image/video gen)         (API key pool)              (T8Star/ModelScope)
     │
     └── Business requests ─────→ FastAPI Backend
         (auth, points, logs)       (SQLite database)
@@ -41,19 +36,23 @@ User Browser
 ### Key Components
 
 - **backend/**: FastAPI with SQLAlchemy ORM, handles user auth, points system, model configuration, pricing
-- **vercel-api/**: Serverless functions that proxy AI requests, keeping API keys secure on the server side
+- **tencent-function/**: Single Tencent Cloud Function proxy that routes requests to AI providers based on placeholder keys
+- **tencent-api-web/**: Web function format code for Tencent Cloud Functions deployment
 - **user-web/**: User-facing Vue 3 app with Element Plus
 - **admin-web/**: Admin dashboard for model management and system configuration
 
 ## Key Patterns
 
-### Provider Mapper Pattern
+### API Key Pool Pattern (tencent-function/)
 
-Different AI models have different API parameter formats. The `vercel-api/lib/provider-mapper.js` handles parameter transformation:
+The cloud function uses a key pool with random selection:
+- `KEY_POOL.modelscope`: Array of ModelScope API keys
+- `KEY_POOL.t8star`: Array of T8Star API keys
+- Frontend sends requests with placeholder keys (`MODELSCOPE_API_KEY` or `T8STAR_API_KEY`)
+- Cloud function replaces placeholders with real keys from the pool
+- Routes to `api.modelscope.cn` or `api.t8star.com` based on placeholder type
 
-- `PARAM_MAPPINGS`: Field name mappings (e.g., `ratio` → `aspect_ratio` for Sora-2)
-- `STATUS_MAPPINGS`: Normalize different status codes to standard `SUCCESS/FAILURE/PROCESSING/PENDING`
-- `mapRequestParams()`: Transform frontend params to API-specific format
+**Note:** The frontend (`user-web/src/api/index.js`) currently references `VERCEL_URL`. This needs to be updated to point to the Tencent Cloud Function URL once deployed.
 
 ### Points Reserve/Confirm/Refund
 
@@ -74,11 +73,11 @@ Models are configured in `ai_models` table with flexible pricing via `model_pric
 
 ## Environment Variables
 
-**Vercel (vercel-api/.env):**
+**Tencent Cloud Functions:**
 ```
-T8STAR_API_KEY=sk-xxx
-MODELSCOPE_API_KEY=sk-xxx
-BACKEND_URL=https://your-server.com
+# Key Pool (configured in tencent-function/index.js)
+KEY_POOL.modelscope = ["sk-xxx-01", "sk-xxx-02", ...]
+KEY_POOL.t8star = ["sk-xxx-01", "sk-xxx-02", ...]
 ```
 
 **Backend:** No special env vars needed; SQLite database created automatically.
@@ -95,11 +94,22 @@ BACKEND_URL=https://your-server.com
 - `GET/POST/PUT/DELETE /admin/models` - Model CRUD
 - `GET/PUT /admin/config` - System configuration
 
-**Vercel Functions:**
-- `POST /api/ai/generate-image` - Image generation proxy
-- `POST /api/ai/generate-video` - Video generation proxy
-- `GET /api/ai/video-status` - Query video generation status
+**Tencent Cloud Functions:**
+- Single proxy endpoint that routes to ModelScope or T8Star based on placeholder key in request
+
+## Deployment
+
+See `tencent-api-web/DEPLOYMENT_GUIDE.md` for Tencent Cloud Functions deployment instructions.
 
 ## Progress Tracking
 
-Development progress tracked in `feature_list.json` (completed items have `"passes": true`). Current phase: frontend development (items 11-16 pending).
+All 20 features completed. See `feature_list.json` for details.
+
+## Current Status
+
+- **Backend**: Fully functional (FastAPI + SQLite)
+- **Frontend**: User-web and Admin-web complete
+- **AI Proxy**: Migrating from Vercel to Tencent Cloud Functions
+  - `tencent-function/index.js`: Simple proxy with key pool pattern (created by Gemini)
+  - `tencent-api-web/`: Contains deployment guide and detailed function implementations
+  - Frontend still points to old Vercel URL - needs update after Tencent deployment
