@@ -1,6 +1,6 @@
 """
 AI 服务层 - 处理提示词生成和 API 调用
-通过腾讯云函数代理调用 ModelScope API
+直接调用 ModelScope API
 """
 import requests
 import re
@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 
 
 class AIService:
-    """AI 提示词生成服务 - 通过腾讯云函数代理"""
+    """AI 提示词生成服务 - 直接调用 ModelScope API"""
 
     # 语言映射字典
     LANG_MAP = {
@@ -42,17 +42,13 @@ class AIService:
     }
 
     # ModelScope 配置
-    MODELSCOPE_TARGET_URL = "https://api-inference.modelscope.cn/v1/chat/completions"
+    MODELSCOPE_API_URL = "https://api-inference.modelscope.cn/v1/chat/completions"
     MODELSCOPE_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+    MODELSCOPE_API_KEY = "ms-904194b2-24f4-40fa-994a-d23694510f21"  # 直接使用 API Key
 
-    def __init__(self, tencent_function_url: str):
-        """
-        初始化 AI 服务
-
-        Args:
-            tencent_function_url: 腾讯云函数 URL
-        """
-        self.tencent_function_url = tencent_function_url
+    def __init__(self):
+        """初始化 AI 服务"""
+        pass
 
     def _get_lang_eng(self, target_lang: str) -> str:
         """将中文语言名转换为英文"""
@@ -70,9 +66,9 @@ class AIService:
             return f"data:image/jpeg;base64,{image_data}"
         return None
 
-    def _call_modelscope_via_proxy(self, prompt: str, images: List[str] = None, max_tokens: int = 1500) -> str:
+    def _call_modelscope_api(self, prompt: str, images: List[str] = None, max_tokens: int = 1500) -> str:
         """
-        通过腾讯云函数调用 ModelScope API
+        直接调用 ModelScope API
 
         Args:
             prompt: 提示词
@@ -95,25 +91,26 @@ class AIService:
                         "image_url": {"url": b64}
                     })
 
-        # 构建请求体 - 发送给云函数
+        # 构建请求体
         request_body = {
-            "target_url": self.MODELSCOPE_TARGET_URL,
             "model": self.MODELSCOPE_MODEL,
             "messages": [{"role": "user", "content": content_list}],
             "max_tokens": max_tokens,
             "temperature": 0.7
         }
 
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.MODELSCOPE_API_KEY}'
+        }
+
         try:
-            # 向云函数发请求，使用占位符 API Key
             resp = requests.post(
-                self.tencent_function_url,
-                headers={
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer MODELSCOPE_API_KEY'  # 占位符，云函数会替换
-                },
+                self.MODELSCOPE_API_URL,
+                headers=headers,
                 json=request_body,
-                timeout=120
+                timeout=120,
+                verify=False  # 跳过 SSL 验证
             )
 
             if resp.status_code == 200:
@@ -156,7 +153,7 @@ class AIService:
         prompt = prompt.replace("{target_num}", str(target_num))
         prompt = prompt.replace("{format_example}", format_example)
 
-        return self._call_modelscope_via_proxy(prompt, images, max_tokens=2000)
+        return self._call_modelscope_api(prompt, images, max_tokens=2000)
 
     # ==================== 2. 生图提示词规划 ====================
 
@@ -183,7 +180,7 @@ class AIService:
         prompt = prompt.replace("{selling_points}", selling_points or "")
         prompt = prompt.replace("{design_style}", design_style or "简约风格")
 
-        result = self._call_modelscope_via_proxy(prompt, images, max_tokens=4000)
+        result = self._call_modelscope_api(prompt, images, max_tokens=4000)
 
         # 解析结果为列表
         return self._parse_prompts(result, num_screens, product_type, design_style)
@@ -266,7 +263,7 @@ Write a video script in English description but {lang_eng} dialogue/text.
         # 合并为完整提示词
         full_prompt = f"{script}\n\n{user_req}"
 
-        return self._call_modelscope_via_proxy(full_prompt, images[:1] if images else None, max_tokens=1500)
+        return self._call_modelscope_api(full_prompt, images[:1] if images else None, max_tokens=1500)
 
     def _get_region_prompt(self, region: str) -> str:
         """根据地区生成场景描述"""
@@ -297,7 +294,7 @@ Write a video script in English description but {lang_eng} dialogue/text.
 
     def translate_text(self, text: str, target_lang: str) -> str:
         """
-        翻译文本 - 通过腾讯云函数代理
+        翻译文本
         """
         lang_eng = self._get_lang_eng(target_lang)
 
@@ -310,4 +307,4 @@ Rule: Output ONLY the translated text. No explanations.
 {text}
 """
 
-        return self._call_modelscope_via_proxy(prompt, images=None, max_tokens=2000)
+        return self._call_modelscope_api(prompt, images=None, max_tokens=2000)
