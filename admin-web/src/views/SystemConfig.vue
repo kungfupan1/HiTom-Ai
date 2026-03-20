@@ -48,19 +48,78 @@
           <div class="form-tip">AI 生成服务的腾讯云函数地址，必须配置才能使用 AI 功能</div>
         </el-form-item>
 
-        <el-divider content-position="left">AI 提示词配置</el-divider>
+        <el-divider content-position="left">AI 系统提示词配置</el-divider>
 
-        <el-form-item label="文案生成系统提示词">
-          <el-input
-            v-model="form.text_system_prompt"
-            type="textarea"
-            :rows="10"
-            placeholder="用于看图写文案功能的系统提示词，支持变量替换..."
-          />
-          <div class="form-tip">
-            支持变量: {target_lang} 目标语言、{product_type} 产品类型、{design_style} 设计风格、{target_num} 生成数量
-          </div>
-        </el-form-item>
+        <el-collapse v-model="activePromptCollapse" class="prompt-collapse">
+          <!-- 1. 看图写卖点提示词 -->
+          <el-collapse-item title="看图写卖点提示词 (电商主图)" name="selling">
+            <template #title>
+              <div class="collapse-title">
+                <span class="title-text">看图写卖点提示词</span>
+                <el-tag type="success" size="small">电商主图</el-tag>
+              </div>
+            </template>
+            <el-form-item label="系统提示词">
+              <el-input
+                v-model="form.image_selling_points_prompt"
+                type="textarea"
+                :rows="12"
+                placeholder="根据产品图片生成多组卖点文案..."
+              />
+            </el-form-item>
+            <div class="form-tip variables-tip">
+              <strong>支持变量:</strong>
+              <el-tag size="small" v-for="v in ['{lang_eng}', '{product_type}', '{design_style}', '{target_num}', '{format_example}']" :key="v" class="var-tag">{{ v }}</el-tag>
+            </div>
+            <el-button size="small" @click="resetPrompt('selling')">恢复默认</el-button>
+          </el-collapse-item>
+
+          <!-- 2. 生图提示词规划 -->
+          <el-collapse-item title="生图提示词规划 (电商主图)" name="image">
+            <template #title>
+              <div class="collapse-title">
+                <span class="title-text">生图提示词规划</span>
+                <el-tag type="primary" size="small">电商主图</el-tag>
+              </div>
+            </template>
+            <el-form-item label="系统提示词">
+              <el-input
+                v-model="form.image_generation_prompt"
+                type="textarea"
+                :rows="18"
+                placeholder="根据产品信息和卖点规划多屏详情页的生图提示词..."
+              />
+            </el-form-item>
+            <div class="form-tip variables-tip">
+              <strong>支持变量:</strong>
+              <el-tag size="small" v-for="v in ['{num_screens}', '{lang_eng}', '{product_type}', '{selling_points}', '{design_style}']" :key="v" class="var-tag">{{ v }}</el-tag>
+            </div>
+            <el-button size="small" @click="resetPrompt('image')">恢复默认</el-button>
+          </el-collapse-item>
+
+          <!-- 3. 视频分镜提示词 -->
+          <el-collapse-item title="视频分镜提示词 (视频生成)" name="video">
+            <template #title>
+              <div class="collapse-title">
+                <span class="title-text">视频分镜提示词</span>
+                <el-tag type="danger" size="small">视频生成</el-tag>
+              </div>
+            </template>
+            <el-form-item label="系统提示词">
+              <el-input
+                v-model="form.video_script_prompt"
+                type="textarea"
+                :rows="16"
+                placeholder="根据产品信息生成视频分镜脚本..."
+              />
+            </el-form-item>
+            <div class="form-tip variables-tip">
+              <strong>支持变量:</strong>
+              <el-tag size="small" v-for="v in ['{target_lang}', '{region_sel}', '{style_sel}', '{category}', '{region_prompt}', '{text_instruction}', '{overlay_action}', '{output_req}']" :key="v" class="var-tag">{{ v }}</el-tag>
+            </div>
+            <el-button size="small" @click="resetPrompt('video')">恢复默认</el-button>
+          </el-collapse-item>
+        </el-collapse>
 
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="loading">
@@ -270,14 +329,99 @@ import request from '@/api/request'
 
 const formRef = ref(null)
 const loading = ref(false)
+const activePromptCollapse = ref(['selling'])
 
 const form = reactive({
   signup_bonus: 10,
   image_base_price: 2,
   pricing_description: '',
   tencent_function_url: '',
-  text_system_prompt: ''
+  // 三个独立的系统提示词
+  image_selling_points_prompt: '',
+  image_generation_prompt: '',
+  video_script_prompt: ''
 })
+
+// 默认提示词模板
+const DEFAULT_PROMPTS = {
+  selling: `[Role] Senior E-commerce Copywriter specialized in **{lang_eng}**.
+
+[Input Info]
+- Product Category: {product_type}
+- Desired Style: {design_style}
+- **TARGET LANGUAGE: {lang_eng}**
+
+[Task]
+Analyze these product images. Combine visual features with "{product_type}" to write catchy 'Main Title' and 'Subtitle'.
+
+[Requirement]
+Generate exactly **{target_num} distinct sets**.
+
+[CRITICAL RULES]
+1. **OUTPUT MUST BE IN {lang_eng}**.
+2. Do NOT use English unless the target language is English.
+3. Even if the input is Chinese/English, translate your thoughts to **{lang_eng}**.
+
+[Format]:
+{format_example}
+
+(Direct output only. Language: {lang_eng})`,
+
+  image: `[角色] 你是一名资深电商详情页设计师与 AI 文生图提示词工程师。
+[任务目标] 根据产品信息，规划并生成 **{num_screens} 屏** 详情页的文生图提示词。
+
+[强制语言规则 - STRICTLY ENFORCED]
+1. **目标语言锁定**：所有的"主文案"和"副文案"必须严格使用 **{lang_eng}**。
+2. **拒绝干扰**：即使用户的【核心卖点】或【产品名称】中包含其他语言（如英文、中文混合），你必须将其翻译或转换为 **{lang_eng}** 输出。
+3. **纯净性**：绝对禁止中英混杂。如果是英文目标语言，不要出现任何汉字；如果是中文目标语言，不要出现非必要的英文。
+
+[视觉纯净规则 - 绝对禁止]
+1. **文字隔离**：画面中除主副文案外，**严禁**出现任何装饰性汉字、印章。
+2. **字体隔离**：必须使用国际通用术语：如 "Sans-serif", "Serif", "Bold Modern Font"。
+3. **元素隔离**：必须使用符合该语言语境的背景元素。
+
+[强制执行规则]
+1. **数量严格匹配**：用户要求生成 {num_screens} 屏，你必须输出 **{num_screens} 条** 独立的提示词。
+2. **输出结构**：每屏内容必须包含："主文案、副文案、设计与排版、画面主体与构图、画质与细节"。
+3. **多图参考**：用户提供了多张参考图，请综合分析这些图片的特征（角度、细节、场景）来规划画面。
+
+[输出格式模板]
+请严格按照以下格式输出（不要输出表格，只输出文本段落）：
+
+第1屏：
+主文案："..."
+副文案："..."
+文案设计与排版：...
+画面主体与构图：...
+画质与细节：...
+
+第2屏：
+...
+（以此类推，直到第 {num_screens} 屏）`,
+
+  video: `You are an expert AI Video Director for E-commerce.
+Task: Write a structured video prompt for Sora.
+
+CONTEXT:
+- {text_instruction}
+- Region: {region_sel}
+- Style: {style_sel}
+- Category: {category}
+
+MANDATORY FORMAT:
+[Type]: {style_sel} Video
+[Structure]: Hook -> Demo -> Benefit -> CTA
+{region_prompt}
+
+[Actions]:
+- (Scene 1: Hook) Opening. Dialogue in {target_lang}: "..."
+- (Scene 2: Demo) Action.
+{overlay_action}
+- (Scene 4: CTA) Presenter recommending. Dialogue in {target_lang}: "..."
+
+[Camera]: ...
+[Sound]: ...`
+}
 
 const apiKeys = ref([])
 
@@ -323,7 +467,10 @@ const loadConfig = async () => {
     form.image_base_price = parseInt(res.image_base_price?.value || '2')
     form.pricing_description = res.pricing_description?.value || ''
     form.tencent_function_url = res.tencent_function_url?.value || ''
-    form.text_system_prompt = res.text_system_prompt?.value || ''
+    // 加载三个系统提示词
+    form.image_selling_points_prompt = res.image_selling_points_prompt?.value || DEFAULT_PROMPTS.selling
+    form.image_generation_prompt = res.image_generation_prompt?.value || DEFAULT_PROMPTS.image
+    form.video_script_prompt = res.video_script_prompt?.value || DEFAULT_PROMPTS.video
   } catch (error) {
     console.error(error)
   }
@@ -353,7 +500,10 @@ const handleSave = async () => {
         image_base_price: String(form.image_base_price),
         pricing_description: form.pricing_description,
         tencent_function_url: form.tencent_function_url,
-        text_system_prompt: form.text_system_prompt
+        // 保存三个系统提示词
+        image_selling_points_prompt: form.image_selling_points_prompt,
+        image_generation_prompt: form.image_generation_prompt,
+        video_script_prompt: form.video_script_prompt
       }
     })
     ElMessage.success('保存成功')
@@ -362,6 +512,18 @@ const handleSave = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 恢复默认提示词
+const resetPrompt = (type) => {
+  if (type === 'selling') {
+    form.image_selling_points_prompt = DEFAULT_PROMPTS.selling
+  } else if (type === 'image') {
+    form.image_generation_prompt = DEFAULT_PROMPTS.image
+  } else if (type === 'video') {
+    form.video_script_prompt = DEFAULT_PROMPTS.video
+  }
+  ElMessage.success('已恢复默认提示词')
 }
 
 // 显示添加 Key 输入框
@@ -474,6 +636,49 @@ onMounted(() => {
   margin-left: 8px;
   color: #909399;
   font-size: 12px;
+}
+
+.variables-tip {
+  margin: 10px 0;
+  padding: 10px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.var-tag {
+  margin: 2px 4px;
+}
+
+.prompt-collapse {
+  margin-bottom: 20px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.prompt-collapse :deep(.el-collapse-item__header) {
+  background: #f5f7fa;
+  padding: 0 16px;
+  height: 50px;
+}
+
+.prompt-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
+}
+
+.prompt-collapse :deep(.el-collapse-item__content) {
+  padding: 16px;
+}
+
+.collapse-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title-text {
+  font-weight: 600;
+  color: #303133;
 }
 
 .api-keys-card {

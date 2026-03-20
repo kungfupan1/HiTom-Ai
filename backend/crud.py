@@ -375,7 +375,10 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
         "image_base_price": int(config_map.get("image_base_price", "2")),
         "pricing_description": config_map.get("pricing_description", ""),
         "tencent_function_url": config_map.get("tencent_function_url", ""),
-        "text_system_prompt": config_map.get("text_system_prompt", "")
+        # 三个系统提示词配置
+        "image_selling_points_prompt": config_map.get("image_selling_points_prompt", ""),
+        "image_generation_prompt": config_map.get("image_generation_prompt", ""),
+        "video_script_prompt": config_map.get("video_script_prompt", "")
     }
 
 
