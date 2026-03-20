@@ -6,14 +6,16 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
+from pydantic import BaseModel
 
 from database import get_db, init_db
 from models import Base
 import crud
 import schemas
 from utils import hash_password, verify_password, create_access_token, decode_token
+from engines.payload_builder import payload_builder
 
 # 创建应用
 app = FastAPI(
@@ -296,6 +298,95 @@ async def calculate_cost(
         raise HTTPException(status_code=400, detail=result["error"])
 
     return result
+
+
+@app.post("/api/calculate-cost-dynamic", response_model=schemas.DynamicCalculateCostResponse)
+async def calculate_cost_dynamic(
+    request: schemas.DynamicCalculateCostRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    动态计算生成费用 - 使用 config_schema.pricing_rules
+
+    支持任意表单字段，根据模型配置动态计算费用
+    """
+    result = crud.calculate_cost_dynamic(
+        db,
+        model_id=request.model_id,
+        form_data=request.form_data
+    )
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return result
+
+
+class BuildPayloadRequest(BaseModel):
+    """构建请求 Payload 请求"""
+    model_id: str
+    form_data: Dict[str, Any]
+
+
+class BuildPayloadResponse(BaseModel):
+    """构建请求 Payload 响应"""
+    model_id: str
+    api_contract: Optional[Dict[str, Any]] = None
+    payload: Dict[str, Any]
+    prompt_used: Optional[str] = None
+
+
+@app.post("/api/build-payload", response_model=BuildPayloadResponse)
+async def build_payload(
+    request: BuildPayloadRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    构建 API 请求 Payload - 使用 config_schema.request_mapping
+
+    用于测试配置是否正确，返回构建后的请求体
+    """
+    model = crud.get_model_by_id(db, request.model_id)
+    if not model:
+        raise HTTPException(status_code=400, detail="模型不存在")
+
+    if not model.config_schema:
+        return BuildPayloadResponse(
+            model_id=request.model_id,
+            payload=request.form_data,
+            prompt_used=None
+        )
+
+    config_schema = model.config_schema
+    request_mapping = config_schema.get("request_mapping", {})
+    api_contract = config_schema.get("api_contract", {})
+    prompt_config = config_schema.get("prompt_config", {})
+
+    # 构建 payload
+    payload = payload_builder.build(
+        request_mapping=request_mapping,
+        form_data=request.form_data,
+        model_id=model.model_id,
+        prompt_config=prompt_config
+    )
+
+    # 提取使用的 prompt
+    prompt_used = None
+    if request_mapping and "prompt_template" in request_mapping:
+        import re
+        prompt_template = request_mapping["prompt_template"]
+        prompt_used = re.sub(
+            r'\{(\w+)\}',
+            lambda m: str(request.form_data.get(m.group(1), "")),
+            prompt_template
+        )
+
+    return BuildPayloadResponse(
+        model_id=request.model_id,
+        api_contract=api_contract,
+        payload=payload,
+        prompt_used=prompt_used
+    )
 
 
 # ============ 积分接口 ============

@@ -149,6 +149,32 @@ class CalculateCostResponse(BaseModel):
     description: str
 
 
+# ============ 动态计费计算相关 ============
+class DynamicCalculateCostRequest(BaseModel):
+    """动态计费请求 - 支持任意表单字段"""
+    model_id: str
+    form_data: Dict[str, Any]  # 用户提交的表单数据
+
+
+class DynamicCostBreakdown(BaseModel):
+    """动态费用明细"""
+    total: int
+    duration_cost: Optional[int] = None
+    resolution_cost: Optional[int] = None
+    ratio_cost: Optional[int] = None
+    base_cost: Optional[int] = None
+    multiply_cost: Optional[int] = None
+
+
+class DynamicCalculateCostResponse(BaseModel):
+    """动态计费响应"""
+    model_id: str
+    model_name: Optional[str] = None
+    cost: int
+    breakdown: DynamicCostBreakdown
+    description: str
+
+
 # ============ 积分相关 ============
 class PointReserveRequest(BaseModel):
     amount: int

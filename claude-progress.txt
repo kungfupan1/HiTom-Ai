@@ -46,7 +46,12 @@ AI 电商内容生成平台重构项目
   - ImageTool.vue 动态渲染表单
   - 模型切换防呆逻辑
   - response_mapping 解析逻辑
-- [ ] 阶段四：Backend 两大调度引擎开发
+- [x] 阶段四：Backend 两大调度引擎开发
+  - 动态计费引擎 (pricing_engine.py)
+  - 报文拼凑引擎 (payload_builder.py)
+  - 新增 API: /api/calculate-cost-dynamic
+  - 新增 API: /api/build-payload
+- [ ] 系统提示词配置功能
 
 ### 2026-03-18
 - [x] 创建 feature_list.json (20 项功能)
@@ -66,9 +71,9 @@ AI 电商内容生成平台重构项目
 
 ## 统计
 - 总功能数: 25 (原 20 + 新增 5)
-- 已完成: 21
-- 进行中: 1 (阶段四)
-- 未开始: 3
+- 已完成: 22
+- 进行中: 1 (系统提示词配置)
+- 未开始: 2
 
 ---
 

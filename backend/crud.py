@@ -9,6 +9,7 @@ import uuid
 import json
 
 from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog, APIKey
+from engines.pricing_engine import pricing_engine
 
 
 # ============ 用户相关 ============
@@ -306,6 +307,39 @@ def calculate_cost(db: Session, model_id: str, duration: int = None, resolution:
         },
         "description": model.pricing_description or ""
     }
+
+
+def calculate_cost_dynamic(db: Session, model_id: str, form_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    动态计费 - 使用 config_schema.pricing_rules 计算
+
+    Args:
+        db: 数据库会话
+        model_id: 模型 ID
+        form_data: 用户提交的表单数据
+
+    Returns:
+        计费结果
+    """
+    model = get_model_by_id(db, model_id)
+    if not model:
+        return {"error": "模型不存在", "cost": 0}
+
+    # 优先使用 config_schema 中的 pricing_rules
+    if model.config_schema and "pricing_rules" in model.config_schema:
+        pricing_rules = model.config_schema["pricing_rules"]
+        result = pricing_engine.calculate(pricing_rules, form_data)
+        result["model_id"] = model_id
+        result["model_name"] = model.display_name
+        return result
+
+    # 向后兼容：使用旧的计费方式
+    duration = form_data.get("duration")
+    resolution = form_data.get("resolution")
+    ratio = form_data.get("aspect_ratio") or form_data.get("ratio")
+    count = form_data.get("count", 1)
+
+    return calculate_cost(db, model_id, duration, resolution, ratio, count)
 
 
 # ============ 系统配置相关 ============
