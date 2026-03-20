@@ -459,7 +459,7 @@ const handleSave = async () => {
       model_type: config.model_info.model_type,
       api_provider: config.model_info.provider,
       is_enabled: true,
-      config_schema: jsonContent.value,
+      config_schema: config,  // 发送解析后的对象，而不是字符串
       // 兼容旧字段
       base_url: '',
       endpoint: '',
