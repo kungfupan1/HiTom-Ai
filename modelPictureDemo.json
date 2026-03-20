@@ -1,0 +1,198 @@
+{
+  "model_info": {
+    "model_id": "nano-banana-2",
+    "display_name": "商品图生成 (T8Star)",
+    "model_type": "image",
+    "provider": "T8Star",
+    "description": "电商商品图生成模型，支持参考图生图和多种比例分辨率"
+  },
+  "api_contract": {
+    "endpoint_url": "https://ai.t8star.cn/v1/images/generations",
+    "placeholder": "T8STAR_API_KEY",
+    "method": "POST",
+    "timeout": 120000,
+    "payload_format": "t8star_image"
+  },
+  "pricing_rules": {
+    "mode": "fixed",
+    "fixed_cost": 2,
+    "description": "每张图片消耗 2 积分"
+  },
+  "workflow": {
+    "enabled": true,
+    "type": "two_step",
+    "steps": [
+      {
+        "step_id": "plan",
+        "name": "提示词规划",
+        "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+        "endpoint_url": "https://api-inference.modelscope.cn/v1/chat/completions",
+        "placeholder": "MODELSCOPE_API_KEY",
+        "description": "使用 Qwen 根据产品信息和参考图生成详细绘图提示词"
+      },
+      {
+        "step_id": "generate",
+        "name": "图片生成",
+        "model_id": "nano-banana-2",
+        "endpoint_url": "https://ai.t8star.cn/v1/images/generations",
+        "placeholder": "T8STAR_API_KEY",
+        "description": "使用 T8Star 根据提示词生成商品图"
+      }
+    ]
+  },
+  "ui_schema": [
+    {
+      "field_name": "product_type",
+      "label": "产品名称",
+      "ui_type": "input",
+      "placeholder": "例如：高端商务手提包",
+      "required": true,
+      "default_value": ""
+    },
+    {
+      "field_name": "design_style",
+      "label": "设计风格",
+      "ui_type": "select",
+      "options": [
+        {"label": "简约 Ins 风", "value": "简约 Ins 风"},
+        {"label": "高级奢华", "value": "高级奢华"},
+        {"label": "科技感", "value": "科技感"},
+        {"label": "清新自然", "value": "清新自然"},
+        {"label": "赛博朋克", "value": "赛博朋克"},
+        {"label": "国潮风", "value": "国潮风"}
+      ],
+      "default_value": "简约 Ins 风",
+      "required": false
+    },
+    {
+      "field_name": "selling_points",
+      "label": "核心卖点",
+      "ui_type": "textarea",
+      "placeholder": "在此输入卖点...",
+      "required": true,
+      "default_value": "",
+      "max_length": 5000
+    },
+    {
+      "field_name": "target_lang",
+      "label": "目标语言",
+      "ui_type": "select",
+      "options": [
+        {"label": "日语", "value": "日语"},
+        {"label": "英语", "value": "英语"},
+        {"label": "中文", "value": "中文"},
+        {"label": "韩语", "value": "韩语"},
+        {"label": "法语", "value": "法语"},
+        {"label": "德语", "value": "德语"},
+        {"label": "俄语", "value": "俄语"},
+        {"label": "西班牙语", "value": "西班牙语"},
+        {"label": "阿拉伯语", "value": "阿拉伯语"},
+        {"label": "葡萄牙语", "value": "葡萄牙语"},
+        {"label": "越南语", "value": "越南语"},
+        {"label": "泰语", "value": "泰语"},
+        {"label": "印尼语", "value": "印尼语"},
+        {"label": "意大利语", "value": "意大利语"},
+        {"label": "马来语", "value": "马来语"}
+      ],
+      "default_value": "中文",
+      "required": false
+    },
+    {
+      "field_name": "aspect_ratio",
+      "label": "画面比例",
+      "ui_type": "select",
+      "options": [
+        {"label": "3:4", "value": "3:4"},
+        {"label": "1:1", "value": "1:1"},
+        {"label": "16:9", "value": "16:9"},
+        {"label": "9:16", "value": "9:16"}
+      ],
+      "default_value": "3:4",
+      "required": true
+    },
+    {
+      "field_name": "resolution",
+      "label": "分辨率",
+      "ui_type": "select",
+      "options": [
+        {"label": "1K (1024px)", "value": "1K"},
+        {"label": "2K (2048px)", "value": "2K"}
+      ],
+      "default_value": "1K",
+      "required": true
+    },
+    {
+      "field_name": "num_images",
+      "label": "生成数量",
+      "ui_type": "input-number",
+      "min": 1,
+      "max": 10,
+      "default_value": 1,
+      "required": true
+    },
+    {
+      "field_name": "ref_images",
+      "label": "参考图片",
+      "ui_type": "upload",
+      "max_count": 5,
+      "required": false,
+      "description": "最多上传5张参考图片"
+    }
+  ],
+  "request_mapping": {
+    "dynamic_params": {
+      "model": "model",
+      "prompt": "prompt",
+      "size": "size",
+      "image": "image",
+      "response_format": "response_format"
+    },
+    "static_params": {
+      "response_format": "url"
+    },
+    "size_calculation": {
+      "method": "calculate_dimensions",
+      "params": ["aspect_ratio", "resolution"],
+      "ratio_map": {
+        "1:1": [1, 1],
+        "2:3": [2, 3],
+        "3:2": [3, 2],
+        "3:4": [3, 4],
+        "4:3": [4, 3],
+        "4:5": [4, 5],
+        "5:4": [5, 4],
+        "9:16": [9, 16],
+        "16:9": [16, 9],
+        "21:9": [21, 9]
+      },
+      "size_map": {
+        "1K": 1024,
+        "2K": 2048,
+        "4K": 4096
+      }
+    },
+    "model_selection": {
+      "default": "nano-banana-2",
+      "rules": [
+        {
+          "condition": "resolution === '4K'",
+          "model": "nano-banana-2-4k"
+        }
+      ]
+    }
+  },
+  "response_mapping": {
+    "result_url_path": "data[0].url",
+    "error_path": "error"
+  },
+  "planning_config": {
+    "enabled": true,
+    "model": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "endpoint_url": "https://api-inference.modelscope.cn/v1/chat/completions",
+    "placeholder": "MODELSCOPE_API_KEY",
+    "max_tokens": 3000,
+    "temperature": 0.7,
+    "output_format": "structured_prompts",
+    "prompt_template": "[角色] 你是一名资深电商详情页设计师与 AI 文生图提示词工程师。\n[任务目标] 根据产品信息，规划并生成 **{num_screens} 屏** 详情页的文生图提示词。\n\n[强制语言规则 - STRICTLY ENFORCED]\n1. **目标语言锁定**：所有的主文案和副文案必须严格使用 **{lang_eng}**。\n2. **拒绝干扰**：即使用户的核心卖点或产品名称中包含其他语言，你必须将其翻译或转换为 **{lang_eng}** 输出。\n3. **纯净性**：绝对禁止中英混杂。\n\n[视觉纯净规则 - 绝对禁止]\n1. **文字隔离**：画面中除主副文案外，严禁出现任何装饰性汉字、印章。\n2. **字体隔离**：必须使用国际通用术语：如 Sans-serif, Serif, Bold Modern Font。\n\n[强制执行规则]\n1. **数量严格匹配**：用户要求生成 {num_screens} 屏，你必须输出 **{num_screens} 条** 独立的提示词。\n2. **输出结构**：每屏内容必须包含：主文案、副文案、设计与排版、画面主体与构图、画质与细节。\n\n[输出格式模板]\n第1屏：\n主文案：...\n副文案：...\n文案设计与排版：...\n画面主体与构图：...\n画质与细节：...\n\n第2屏：\n...\n（以此类推）"
+  }
+}

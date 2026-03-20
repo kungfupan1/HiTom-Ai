@@ -65,6 +65,9 @@ class AIModel(Base):
     # 前端展示配置
     frontend_config = Column(JSON)  # 前端下拉选项等
 
+    # 配置驱动架构：大一统 JSON Schema
+    config_schema = Column(JSON)  # 完整的模型配置 JSON
+
     # 费用说明
     pricing_description = Column(Text)  # 展示给用户的费用说明
 

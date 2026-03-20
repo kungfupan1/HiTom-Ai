@@ -9,12 +9,13 @@ AI 电商内容生成平台重构项目
 3. Vercel Functions 代理 - AI 请求通过 Serverless 转发
 4. 前端保留 - Vue 前端 UI 基本不变
 5. 后端精简 - 保留业务逻辑，AI 代理迁移到 Vercel
+6. **配置驱动重构** - 引入大一统 JSON Schema，实现零代码接入新模型
 
 ### 架构
 ```
 用户浏览器
     │
-    ├── AI 请求 → Vercel Functions → AI 服务商
+    ├── AI 请求 → 腾讯云函数 → AI 服务商
     │
     └── 业务请求 → 你的服务器 (FastAPI + SQLite)
 ```
@@ -22,6 +23,26 @@ AI 电商内容生成平台重构项目
 ---
 
 ## 进度记录
+
+### 2026-03-20 【配置驱动重构开始】
+- [x] 阅读设计文档 `HiTom_AI_Refactor_Design.md`
+- [x] 分析现有代码硬编码逻辑
+- [x] 创建 JSON 模板文件：
+  - `modelVideoConfigDemo.json` - Grok 视频生成配置
+  - `modelTextConfigDemo.json` - Qwen 文案生成配置
+  - `modelPictureDemo.json` - 商品图生成配置
+- [x] 阶段一：Admin Web 模型管理重构
+  - 删除 ModelEdit.vue 独立页面
+  - 重构 ModelManage.vue：JSON 编辑器 Dialog + 卡片布局
+  - 实现 JSON 格式校验和实时预览
+  - 添加模板加载功能
+- [x] 阶段二（部分）：Backend 数据库升级
+  - AIModel 表添加 config_schema 字段
+  - 更新 schemas.py 支持 config_schema
+  - 创建数据库迁移脚本
+  - 导入初始模型配置（Grok, Qwen, 商品图, Sora-2）
+- [ ] 阶段三：User Web 动态表单重构
+- [ ] 阶段四：Backend 两大调度引擎开发
 
 ### 2026-03-18
 - [x] 创建 feature_list.json (20 项功能)
@@ -40,10 +61,10 @@ AI 电商内容生成平台重构项目
 ---
 
 ## 统计
-- 总功能数: 20
-- 已完成: 5 (#1, #2, #3, #4, #5)
-- 进行中: 0
-- 未开始: 15
+- 总功能数: 25 (原 20 + 新增 5)
+- 已完成: 20
+- 进行中: 1 (阶段一)
+- 未开始: 4
 
 ---
 
@@ -51,3 +72,4 @@ AI 电商内容生成平台重构项目
 - T8Star API 无地区限制，Vercel 可访问
 - 数据库继续使用 SQLite（在自有服务器）
 - 前端继续使用 Vue 3 + Vite
+- **配置驱动重构**：所有模型配置收敛到 config_schema JSON

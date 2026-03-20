@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# 项目工作模式
+
+使用长期运行代理模式工作。
+
+## 会话启动时
+
+1. 读取 `claude-progress.txt` 和 `feature_list.json`
+2. 查看 git log
+3. 验证现有功能
+4. 选择下一个任务
+
+## 会话结束时
+
+1. git commit
+2. 更新 `claude-progress.txt`
+3. 更新 `feature_list.json`
+
+---
+
 ## Project Overview
 
 Hi-Tom-AI is an AI e-commerce content generation platform that generates images and videos using AI services (T8Star, ModelScope). The architecture separates AI API calls (handled by Tencent Cloud Functions) from business logic (handled by FastAPI backend).

@@ -1,0 +1,143 @@
+{
+  "model_info": {
+    "model_id": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "display_name": "Qwen3-VL 看图写文案",
+    "model_type": "text",
+    "provider": "ModelScope",
+    "description": "通义千问视觉语言模型，支持看图生成多语言电商文案"
+  },
+  "api_contract": {
+    "endpoint_url": "https://api-inference.modelscope.cn/v1/chat/completions",
+    "placeholder": "MODELSCOPE_API_KEY",
+    "method": "POST",
+    "timeout": 120000,
+    "payload_format": "openai_vision"
+  },
+  "pricing_rules": {
+    "mode": "fixed",
+    "fixed_cost": 0,
+    "description": "看图写文案功能免费使用"
+  },
+  "ui_schema": [
+    {
+      "field_name": "product_type",
+      "label": "产品类型",
+      "ui_type": "input",
+      "placeholder": "例如：潮汕菜脯",
+      "required": false,
+      "default_value": "通用产品"
+    },
+    {
+      "field_name": "design_style",
+      "label": "设计风格",
+      "ui_type": "select",
+      "options": [
+        {"label": "简约 Ins 风", "value": "简约 Ins 风"},
+        {"label": "高级奢华", "value": "高级奢华"},
+        {"label": "科技感", "value": "科技感"},
+        {"label": "清新自然", "value": "清新自然"},
+        {"label": "赛博朋克", "value": "赛博朋克"},
+        {"label": "国潮风", "value": "国潮风"}
+      ],
+      "default_value": "简约 Ins 风",
+      "required": false
+    },
+    {
+      "field_name": "target_lang",
+      "label": "目标语言",
+      "ui_type": "select",
+      "options": [
+        {"label": "日语", "value": "日语"},
+        {"label": "英语", "value": "英语"},
+        {"label": "中文", "value": "中文"},
+        {"label": "韩语", "value": "韩语"},
+        {"label": "法语", "value": "法语"},
+        {"label": "德语", "value": "德语"},
+        {"label": "俄语", "value": "俄语"},
+        {"label": "西班牙语", "value": "西班牙语"},
+        {"label": "阿拉伯语", "value": "阿拉伯语"},
+        {"label": "葡萄牙语", "value": "葡萄牙语"},
+        {"label": "越南语", "value": "越南语"},
+        {"label": "泰语", "value": "泰语"},
+        {"label": "印尼语", "value": "印尼语"},
+        {"label": "意大利语", "value": "意大利语"},
+        {"label": "马来语", "value": "马来语"}
+      ],
+      "default_value": "中文",
+      "required": false
+    },
+    {
+      "field_name": "target_num",
+      "label": "生成数量",
+      "ui_type": "input-number",
+      "min": 1,
+      "max": 5,
+      "default_value": 1,
+      "required": false
+    },
+    {
+      "field_name": "images",
+      "label": "参考图片",
+      "ui_type": "upload",
+      "max_count": 3,
+      "required": true,
+      "description": "最多上传3张产品图片"
+    }
+  ],
+  "request_mapping": {
+    "dynamic_params": {
+      "model": "model",
+      "messages": "messages",
+      "max_tokens": "max_tokens",
+      "temperature": "temperature"
+    },
+    "static_params": {
+      "model": "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "max_tokens": 1500,
+      "temperature": 0.7
+    },
+    "message_format": {
+      "role": "user",
+      "content_structure": "vision_multimodal",
+      "text_field": "prompt_text",
+      "image_field": "images"
+    }
+  },
+  "response_mapping": {
+    "content_path": "choices[0].message.content",
+    "error_path": "error"
+  },
+  "prompt_config": {
+    "use_system_prompt": true,
+    "system_prompt_source": "config",
+    "default_system_prompt": "[Role] Senior E-commerce Copywriter specialized in **{target_lang}**.\n[Input Info]\n- Product Category: {product_type}\n- Desired Style: {design_style}\n- **TARGET LANGUAGE: {target_lang}**\n[Task]\nAnalyze these product images. Write catchy 'Main Title' and 'Subtitle'.\n[Requirement]\nGenerate exactly **{target_num} distinct sets**.\n[CRITICAL RULES]\n1. **OUTPUT MUST BE IN {target_lang}**.\n2. Do NOT use English unless the target language is English.\n[Format]:\n{format_example}\n(Direct output only. Language: {target_lang})",
+    "language_mapping": {
+      "中文": "Chinese",
+      "简体中文": "Simplified Chinese",
+      "繁体中文": "Traditional Chinese",
+      "英语": "English",
+      "英文": "English",
+      "日语": "Japanese",
+      "日文": "Japanese",
+      "韩语": "Korean",
+      "韩文": "Korean",
+      "法语": "French",
+      "德语": "German",
+      "俄语": "Russian",
+      "西班牙语": "Spanish",
+      "葡萄牙语": "Portuguese",
+      "意大利语": "Italian",
+      "荷兰语": "Dutch",
+      "波兰语": "Polish",
+      "瑞典语": "Swedish",
+      "越南语": "Vietnamese",
+      "泰语": "Thai",
+      "印尼语": "Indonesian",
+      "马来语": "Malay",
+      "菲律宾语": "Filipino",
+      "印地语": "Hindi",
+      "阿拉伯语": "Arabic",
+      "土耳其语": "Turkish"
+    }
+  }
+}

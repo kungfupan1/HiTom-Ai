@@ -240,5 +240,66 @@
       "编写 API 接口文档"
     ],
     "passes": true
+  },
+  {
+    "id": 21,
+    "category": "配置驱动重构-阶段一",
+    "description": "Admin Web 模型管理重构：JSON 编辑器 + 卡片布局",
+    "steps": [
+      "删除 ModelEdit.vue 独立页面",
+      "创建 JSON 模板文件 (modelVideoConfigDemo.json, modelTextConfigDemo.json, modelPictureDemo.json)",
+      "重构 ModelManage.vue：JSON 编辑器 Dialog",
+      "实现 JSON 格式校验",
+      "卡片布局展示模型列表",
+      "导入 Grok、Qwen、Sora 配置到数据库"
+    ],
+    "passes": true
+  },
+  {
+    "id": 22,
+    "category": "配置驱动重构-阶段二",
+    "description": "Backend 数据库与结构升级：config_schema 字段",
+    "steps": [
+      "AIModel 表添加 config_schema 字段 (JSON 类型)",
+      "更新 schemas.py 添加 ConfigSchema 结构",
+      "更新 /api/models 接口返回完整 config_schema",
+      "实现数据迁移脚本（向后兼容）"
+    ],
+    "passes": true
+  },
+  {
+    "id": 23,
+    "category": "配置驱动重构-阶段三",
+    "description": "User Web 动态表单重构：UI 动态渲染",
+    "steps": [
+      "VideoTool.vue 动态渲染表单 (v-for + ui_schema)",
+      "ImageTool.vue 动态渲染表单",
+      "实现模型切换防呆逻辑",
+      "重构轮询解析逻辑 (response_mapping)"
+    ],
+    "passes": false
+  },
+  {
+    "id": 24,
+    "category": "配置驱动重构-阶段四",
+    "description": "Backend 两大调度引擎开发",
+    "steps": [
+      "动态计费引擎 (pricing_rules 解析)",
+      "报文拼凑引擎 (request_mapping + payload_builder)",
+      "集成到现有积分预扣流程",
+      "集成到 AI 请求流程"
+    ],
+    "passes": false
+  },
+  {
+    "id": 25,
+    "category": "配置驱动重构-扩展",
+    "description": "系统提示词配置功能",
+    "steps": [
+      "管理后台添加系统提示词配置栏",
+      "后端添加 text_system_prompt 配置项",
+      "文案生成接口优先读取配置"
+    ],
+    "passes": false
   }
 ]

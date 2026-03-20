@@ -25,12 +25,6 @@ const routes = [
         meta: { title: '模型管理' }
       },
       {
-        path: 'models/edit/:id?',
-        name: 'ModelEdit',
-        component: () => import('@/views/ModelEdit.vue'),
-        meta: { title: '编辑模型' }
-      },
-      {
         path: 'config',
         name: 'SystemConfig',
         component: () => import('@/views/SystemConfig.vue'),

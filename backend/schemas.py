@@ -56,8 +56,8 @@ class AIModelBase(BaseModel):
 
 
 class AIModelCreate(AIModelBase):
-    base_url: str
-    endpoint: str
+    base_url: str = ""
+    endpoint: str = ""
     api_provider: Optional[str] = None
     billing_mode: str = "per_use"  # per_use/duration
     base_price: int = 0
@@ -67,6 +67,7 @@ class AIModelCreate(AIModelBase):
     frontend_config: Optional[Dict[str, Any]] = None
     pricing_description: Optional[str] = None
     pricing_rules: Optional[List[PricingRuleCreate]] = None
+    config_schema: Optional[Dict[str, Any]] = None  # 大一统 JSON 配置
 
 
 class AIModelUpdate(BaseModel):
@@ -82,6 +83,7 @@ class AIModelUpdate(BaseModel):
     status_mapping: Optional[Dict[str, Any]] = None
     frontend_config: Optional[Dict[str, Any]] = None
     pricing_description: Optional[str] = None
+    config_schema: Optional[Dict[str, Any]] = None  # 大一统 JSON 配置
 
 
 class AIModelResponse(AIModelBase):
@@ -90,11 +92,13 @@ class AIModelResponse(AIModelBase):
     endpoint: str
     billing_mode: str
     base_price: int
+    api_provider: Optional[str] = None
     request_mapping: Optional[Dict[str, Any]] = None
     response_mapping: Optional[Dict[str, Any]] = None
     status_mapping: Optional[Dict[str, Any]] = None
     frontend_config: Optional[Dict[str, Any]] = None
     pricing_description: Optional[str] = None
+    config_schema: Optional[Dict[str, Any]] = None  # 大一统 JSON 配置
     pricing_rules: List[PricingRuleResponse] = []
     create_time: datetime
     update_time: datetime
@@ -112,7 +116,9 @@ class AIModelListItem(BaseModel):
     is_enabled: bool
     billing_mode: str
     base_price: int
+    api_provider: Optional[str] = None
     pricing_description: Optional[str] = None
+    config_schema: Optional[Dict[str, Any]] = None  # 大一统 JSON 配置
 
     class Config:
         from_attributes = True

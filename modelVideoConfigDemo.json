@@ -1,0 +1,198 @@
+{
+  "model_info": {
+    "model_id": "grok-video-3",
+    "display_name": "Grok Video 3.0",
+    "model_type": "video",
+    "provider": "T8Star",
+    "description": "xAI Grok 视频生成模型，支持多种时长和分辨率"
+  },
+  "api_contract": {
+    "endpoint_url": "https://ai.t8star.cn/v2/videos/generations",
+    "status_url": "https://ai.t8star.cn/v2/videos/generations/{task_id}",
+    "placeholder": "T8STAR_API_KEY",
+    "method": "POST",
+    "status_method": "GET",
+    "timeout": 180000,
+    "payload_format": "t8star_video"
+  },
+  "pricing_rules": {
+    "mode": "dynamic",
+    "unit_price": 2,
+    "multiply_by_field": "duration",
+    "duration_pricing": {
+      "5": 2,
+      "10": 2,
+      "15": 5,
+      "25": 25
+    },
+    "resolution_pricing": {
+      "720P": 0,
+      "1080P": 2
+    }
+  },
+  "ui_schema": [
+    {
+      "field_name": "product_type",
+      "label": "产品名称",
+      "ui_type": "input",
+      "placeholder": "例如：潮汕菜脯",
+      "required": true,
+      "default_value": ""
+    },
+    {
+      "field_name": "selling_points",
+      "label": "核心卖点",
+      "ui_type": "textarea",
+      "placeholder": "在此处输入文案，或者上传图片后点击「看图自动生成文案」按钮...",
+      "required": true,
+      "default_value": "",
+      "max_length": 5000
+    },
+    {
+      "field_name": "region",
+      "label": "投放地区",
+      "ui_type": "select",
+      "options": [
+        {"label": "东亚 (中日韩)", "value": "东亚 (中日韩)"},
+        {"label": "东南亚", "value": "东南亚"},
+        {"label": "欧美", "value": "欧美"},
+        {"label": "中东", "value": "中东"},
+        {"label": "非洲", "value": "非洲"}
+      ],
+      "default_value": "东亚 (中日韩)",
+      "required": false
+    },
+    {
+      "field_name": "language",
+      "label": "目标语言",
+      "ui_type": "select",
+      "options": [
+        {"label": "日语", "value": "日语 (Japanese)"},
+        {"label": "英语", "value": "英语 (English)"},
+        {"label": "中文", "value": "中文 (Chinese)"},
+        {"label": "韩语", "value": "韩语 (Korean)"},
+        {"label": "法语", "value": "法语 (French)"},
+        {"label": "德语", "value": "德语 (German)"},
+        {"label": "俄语", "value": "俄语 (Russian)"},
+        {"label": "西班牙语", "value": "西班牙语 (Spanish)"},
+        {"label": "阿拉伯语", "value": "阿拉伯语 (Arabic)"},
+        {"label": "葡萄牙语", "value": "葡萄牙语 (Portuguese)"},
+        {"label": "越南语", "value": "越南语 (Vietnamese)"},
+        {"label": "泰语", "value": "泰语 (Thai)"},
+        {"label": "印尼语", "value": "印尼语 (Indonesian)"},
+        {"label": "意大利语", "value": "意大利语 (Italian)"},
+        {"label": "马来语", "value": "马来语 (Malay)"}
+      ],
+      "default_value": "日语 (Japanese)",
+      "required": false
+    },
+    {
+      "field_name": "category",
+      "label": "产品类目",
+      "ui_type": "select",
+      "options": [
+        {"label": "食品饮料", "value": "食品饮料"},
+        {"label": "美妆护肤", "value": "美妆护肤"},
+        {"label": "数码家电", "value": "数码家电"},
+        {"label": "服装配饰", "value": "服装配饰"},
+        {"label": "家居日用", "value": "家居日用"}
+      ],
+      "default_value": "食品饮料",
+      "required": false
+    },
+    {
+      "field_name": "style",
+      "label": "视频风格",
+      "ui_type": "select",
+      "options": [
+        {"label": "UGC 种草", "value": "UGC 种草"},
+        {"label": "产品口播", "value": "产品口播"},
+        {"label": "产品演示", "value": "产品演示"},
+        {"label": "TVC 广告", "value": "TVC 广告"}
+      ],
+      "default_value": "UGC 种草",
+      "required": false
+    },
+    {
+      "field_name": "aspect_ratio",
+      "label": "画面比例",
+      "ui_type": "select",
+      "options": [
+        {"label": "9:16 (手机竖屏)", "value": "9:16"},
+        {"label": "16:9 (横屏)", "value": "16:9"},
+        {"label": "1:1 (方形)", "value": "1:1"}
+      ],
+      "default_value": "9:16",
+      "required": true,
+      "affects_pricing": false
+    },
+    {
+      "field_name": "duration",
+      "label": "时长(秒)",
+      "ui_type": "select",
+      "options": [
+        {"label": "5秒", "value": 5},
+        {"label": "10秒", "value": 10},
+        {"label": "15秒", "value": 15},
+        {"label": "25秒", "value": 25}
+      ],
+      "default_value": 10,
+      "required": true,
+      "affects_pricing": true
+    },
+    {
+      "field_name": "resolution",
+      "label": "分辨率",
+      "ui_type": "select",
+      "options": [
+        {"label": "标清 (720P)", "value": "720P"},
+        {"label": "高清 (1080P)", "value": "1080P"}
+      ],
+      "default_value": "720P",
+      "required": true,
+      "affects_pricing": true
+    },
+    {
+      "field_name": "images",
+      "label": "参考图片",
+      "ui_type": "upload",
+      "max_count": 5,
+      "required": false,
+      "description": "最多上传5张参考图片"
+    }
+  ],
+  "request_mapping": {
+    "dynamic_params": {
+      "model": "model",
+      "prompt": "prompt",
+      "duration": "duration",
+      "aspect_ratio": "ratio",
+      "images": "images"
+    },
+    "static_params": {},
+    "prompt_template": "产品: {product_type}\n卖点: {selling_points}\n风格: {style}\n类目: {category}\n语言: {language}\n地区: {region}",
+    "value_transformations": {
+      "resolution": {
+        "target_field": "hd",
+        "transform": "resolution === '1080P'"
+      }
+    }
+  },
+  "response_mapping": {
+    "task_id_path": "task_id",
+    "status_path": "status",
+    "progress_path": "progress",
+    "result_url_path": "data.output",
+    "error_path": "fail_reason",
+    "status_mapping": {
+      "success": ["success", "completed", "succeeded"],
+      "processing": ["processing", "pending", "running"],
+      "failed": ["failed", "error", "failure", "rejected", "canceled"]
+    }
+  },
+  "polling_config": {
+    "interval": 15000,
+    "max_attempts": 120,
+    "timeout": 600000
+  }
+}
