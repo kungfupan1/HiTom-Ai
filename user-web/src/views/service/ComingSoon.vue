@@ -1,8 +1,8 @@
 <template>
   <div class="coming-soon">
     <div class="content">
-      <el-icon :size="80" color="#00f260"><VideoCamera /></el-icon>
-      <h2>普通视频生成</h2>
+      <el-icon :size="80" color="#00f260"><Loading /></el-icon>
+      <h2>{{ pageTitle }}</h2>
       <p class="desc">开发中，敬请期待...</p>
       <el-button type="primary" disabled>即将上线</el-button>
     </div>
@@ -10,7 +10,16 @@
 </template>
 
 <script setup>
-import { VideoCamera } from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { Loading } from '@element-plus/icons-vue'
+
+const route = useRoute()
+
+// 根据路由动态显示标题
+const pageTitle = computed(() => {
+  return route.meta?.title || '功能开发中'
+})
 </script>
 
 <style scoped>

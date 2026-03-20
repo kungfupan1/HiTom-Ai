@@ -225,24 +225,40 @@ const handleCommand = (command) => {
 }
 
 /* 覆盖 Element Plus 菜单样式 */
-:deep(.el-menu-item) {
-  border-radius: 8px;
-  margin-bottom: 5px;
-  color: #a0aec0 !important;
-  font-weight: 600;
-  transition: all 0.3s;
-}
 
+/* 大类（子菜单标题）样式 */
 :deep(.el-sub-menu__title) {
   border-radius: 8px;
   margin-bottom: 5px;
-  color: #a0aec0 !important;
-  font-weight: 600;
+  color: #fff !important;  /* 大类颜色更亮 */
+  font-weight: 700;        /* 大类加粗 */
+  font-size: 16px;         /* 大类字体更大 */
   transition: all 0.3s;
 }
 
-:deep(.el-menu-item:hover),
 :deep(.el-sub-menu__title:hover) {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+}
+
+/* 大类图标 */
+:deep(.el-sub-menu__title .el-icon) {
+  color: #00f260;  /* 大类图标用亮绿色 */
+}
+
+/* 小类（菜单项）样式 */
+:deep(.el-menu-item) {
+  border-radius: 8px;
+  margin-bottom: 5px;
+  color: #a0aec0 !important;  /* 小类颜色稍淡 */
+  font-weight: 500;            /* 小类不加粗 */
+  font-size: 14px;             /* 小类字体稍小 */
+  transition: all 0.3s;
+  padding-left: 50px !important;
+  min-width: auto;
+}
+
+:deep(.el-menu-item:hover) {
   background-color: rgba(255, 255, 255, 0.08) !important;
   color: #fff !important;
 }
@@ -253,20 +269,6 @@ const handleCommand = (command) => {
   color: white !important;
   box-shadow: 0 0 15px rgba(127, 0, 255, 0.5);
   border: 1px solid rgba(255,255,255,0.2);
-}
-
-.gradient-icon {
-  color: #a0aec0;
-}
-
-:deep(.el-menu-item.is-active) .gradient-icon {
-  color: #fff;
-}
-
-/* 子菜单内部项样式 */
-:deep(.el-sub-menu .el-menu-item) {
-  padding-left: 50px !important;
-  min-width: auto;
 }
 
 .collapse-btn {

@@ -9,7 +9,7 @@ import uuid
 import json
 
 from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog
-from models import ContentCategory, ContentItem, ContentCard
+from models import ContentConfig
 from engines.pricing_engine import pricing_engine
 
 
@@ -383,168 +383,30 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
     }
 
 
-# ============ 内容管理相关 ============
-# Category CRUD
-def get_all_categories(db: Session, enabled_only: bool = False) -> List[ContentCategory]:
-    query = db.query(ContentCategory)
-    if enabled_only:
-        query = query.filter(ContentCategory.is_enabled == True)
-    return query.order_by(ContentCategory.sort_order, ContentCategory.id).all()
+# ============ 内容配置相关 ============
+def get_content_config(db: Session, key: str) -> Optional[Dict[str, Any]]:
+    """获取小类配置"""
+    config = db.query(ContentConfig).filter(ContentConfig.key == key).first()
+    if config:
+        return config.config
+    return None
 
 
-def get_category_by_key(db: Session, category_key: str) -> Optional[ContentCategory]:
-    return db.query(ContentCategory).filter(ContentCategory.category_key == category_key).first()
-
-
-def get_category_by_pk(db: Session, pk: int) -> Optional[ContentCategory]:
-    return db.query(ContentCategory).filter(ContentCategory.id == pk).first()
-
-
-def create_category(db: Session, category_data: dict) -> ContentCategory:
-    items_data = category_data.pop("items", [])
-    category = ContentCategory(**category_data)
-    db.add(category)
+def set_content_config(db: Session, key: str, config: Dict[str, Any], description: str = None) -> ContentConfig:
+    """设置小类配置"""
+    existing = db.query(ContentConfig).filter(ContentConfig.key == key).first()
+    if existing:
+        existing.config = config
+        if description:
+            existing.description = description
+    else:
+        existing = ContentConfig(key=key, config=config, description=description)
+        db.add(existing)
     db.commit()
-    db.refresh(category)
-
-    for item_data in items_data:
-        cards_data = item_data.pop("cards", [])
-        item = ContentItem(category_id=category.id, **item_data)
-        db.add(item)
-        db.commit()
-        db.refresh(item)
-
-        for card_data in cards_data:
-            card = ContentCard(item_id=item.id, **card_data)
-            db.add(card)
-
-    db.commit()
-    db.refresh(category)
-    return category
+    db.refresh(existing)
+    return existing
 
 
-def update_category(db: Session, pk: int, update_data: dict) -> Optional[ContentCategory]:
-    category = get_category_by_pk(db, pk)
-    if not category:
-        return None
-    for key, value in update_data.items():
-        if hasattr(category, key) and value is not None:
-            setattr(category, key, value)
-    db.commit()
-    db.refresh(category)
-    return category
-
-
-def delete_category(db: Session, pk: int) -> bool:
-    category = get_category_by_pk(db, pk)
-    if not category:
-        return False
-    db.delete(category)
-    db.commit()
-    return True
-
-
-# Item CRUD
-def get_items_by_category(db: Session, category_id: int, enabled_only: bool = False) -> List[ContentItem]:
-    query = db.query(ContentItem).filter(ContentItem.category_id == category_id)
-    if enabled_only:
-        query = query.filter(ContentItem.is_enabled == True)
-    return query.order_by(ContentItem.sort_order, ContentItem.id).all()
-
-
-def get_item_by_key(db: Session, category_id: int, item_key: str) -> Optional[ContentItem]:
-    return db.query(ContentItem).filter(
-        ContentItem.category_id == category_id,
-        ContentItem.item_key == item_key
-    ).first()
-
-
-def get_item_by_pk(db: Session, pk: int) -> Optional[ContentItem]:
-    return db.query(ContentItem).filter(ContentItem.id == pk).first()
-
-
-def create_item(db: Session, category_id: int, item_data: dict) -> ContentItem:
-    cards_data = item_data.pop("cards", [])
-    item = ContentItem(category_id=category_id, **item_data)
-    db.add(item)
-    db.commit()
-    db.refresh(item)
-
-    for card_data in cards_data:
-        card = ContentCard(item_id=item.id, **card_data)
-        db.add(card)
-
-    db.commit()
-    db.refresh(item)
-    return item
-
-
-def update_item(db: Session, pk: int, update_data: dict) -> Optional[ContentItem]:
-    item = get_item_by_pk(db, pk)
-    if not item:
-        return None
-    for key, value in update_data.items():
-        if hasattr(item, key) and value is not None:
-            setattr(item, key, value)
-    db.commit()
-    db.refresh(item)
-    return item
-
-
-def delete_item(db: Session, pk: int) -> bool:
-    item = get_item_by_pk(db, pk)
-    if not item:
-        return False
-    db.delete(item)
-    db.commit()
-    return True
-
-
-# Card CRUD
-def get_cards_by_item(db: Session, item_id: int, enabled_only: bool = False) -> List[ContentCard]:
-    query = db.query(ContentCard).filter(ContentCard.item_id == item_id)
-    if enabled_only:
-        query = query.filter(ContentCard.is_enabled == True)
-    return query.order_by(ContentCard.sort_order, ContentCard.id).all()
-
-
-def get_card_by_pk(db: Session, pk: int) -> Optional[ContentCard]:
-    return db.query(ContentCard).filter(ContentCard.id == pk).first()
-
-
-def create_card(db: Session, item_id: int, card_data: dict) -> ContentCard:
-    card = ContentCard(item_id=item_id, **card_data)
-    db.add(card)
-    db.commit()
-    db.refresh(card)
-    return card
-
-
-def update_card(db: Session, pk: int, update_data: dict) -> Optional[ContentCard]:
-    card = get_card_by_pk(db, pk)
-    if not card:
-        return None
-    for key, value in update_data.items():
-        if hasattr(card, key) and value is not None:
-            setattr(card, key, value)
-    db.commit()
-    db.refresh(card)
-    return card
-
-
-def delete_card(db: Session, pk: int) -> bool:
-    card = get_card_by_pk(db, pk)
-    if not card:
-        return False
-    db.delete(card)
-    db.commit()
-    return True
-
-
-# 用户端 API
-def get_content_by_route(db: Session, route_path: str) -> Optional[ContentItem]:
-    """根据路由路径获取内容项及其卡片"""
-    return db.query(ContentItem).filter(
-        ContentItem.route_path == route_path,
-        ContentItem.is_enabled == True
-    ).first()
+def get_all_content_configs(db: Session) -> List[ContentConfig]:
+    """获取所有内容配置"""
+    return db.query(ContentConfig).all()

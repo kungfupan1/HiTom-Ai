@@ -493,140 +493,49 @@ async def admin_recharge(
     return {"status": "success", "new_balance": user.points}
 
 
-# ============ 内容管理接口（管理员） ============
-@app.get("/admin/content/categories", response_model=List[schemas.ContentCategoryResponse])
-async def admin_get_categories(
+# ============ 内容配置接口（管理员） ============
+@app.get("/admin/content-configs")
+async def admin_get_content_configs(
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
-    """管理员获取所有内容分类"""
-    return crud.get_all_categories(db)
+    """管理员获取所有内容配置"""
+    configs = crud.get_all_content_configs(db)
+    return {c.key: {"config": c.config, "description": c.description} for c in configs}
 
 
-@app.post("/admin/content/categories", response_model=schemas.ContentCategoryResponse)
-async def admin_create_category(
-    data: schemas.ContentCategoryCreate,
+@app.get("/admin/content-configs/{key}")
+async def admin_get_content_config(
+    key: str,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
-    """管理员创建内容分类"""
-    return crud.create_category(db, data.model_dump())
+    """管理员获取单个内容配置"""
+    config = crud.get_content_config(db, key)
+    return {"key": key, "config": config or {}}
 
 
-@app.put("/admin/content/categories/{pk}", response_model=schemas.ContentCategoryResponse)
-async def admin_update_category(
-    pk: int,
-    data: schemas.ContentCategoryUpdate,
+@app.put("/admin/content-configs/{key}")
+async def admin_set_content_config(
+    key: str,
+    data: schemas.ContentConfigUpdate,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
-    """管理员更新内容分类"""
-    result = crud.update_category(db, pk, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="分类不存在")
-    return result
+    """管理员设置内容配置"""
+    crud.set_content_config(db, key, data.config)
+    return {"status": "success", "message": "配置已保存"}
 
 
-@app.delete("/admin/content/categories/{pk}")
-async def admin_delete_category(
-    pk: int,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员删除内容分类"""
-    if not crud.delete_category(db, pk):
-        raise HTTPException(status_code=404, detail="分类不存在")
-    return {"status": "success", "message": "分类已删除"}
-
-
-@app.post("/admin/content/categories/{category_id}/items", response_model=schemas.ContentItemResponse)
-async def admin_create_item(
-    category_id: int,
-    data: schemas.ContentItemCreate,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员创建内容项"""
-    return crud.create_item(db, category_id, data.model_dump())
-
-
-@app.put("/admin/content/items/{pk}", response_model=schemas.ContentItemResponse)
-async def admin_update_item(
-    pk: int,
-    data: schemas.ContentItemUpdate,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员更新内容项"""
-    result = crud.update_item(db, pk, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="内容项不存在")
-    return result
-
-
-@app.delete("/admin/content/items/{pk}")
-async def admin_delete_item(
-    pk: int,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员删除内容项"""
-    if not crud.delete_item(db, pk):
-        raise HTTPException(status_code=404, detail="内容项不存在")
-    return {"status": "success", "message": "内容项已删除"}
-
-
-@app.post("/admin/content/items/{item_id}/cards", response_model=schemas.ContentCardResponse)
-async def admin_create_card(
-    item_id: int,
-    data: schemas.ContentCardCreate,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员创建内容卡片"""
-    return crud.create_card(db, item_id, data.model_dump())
-
-
-@app.put("/admin/content/cards/{pk}", response_model=schemas.ContentCardResponse)
-async def admin_update_card(
-    pk: int,
-    data: schemas.ContentCardUpdate,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员更新内容卡片"""
-    result = crud.update_card(db, pk, data.model_dump(exclude_unset=True))
-    if not result:
-        raise HTTPException(status_code=404, detail="内容卡片不存在")
-    return result
-
-
-@app.delete("/admin/content/cards/{pk}")
-async def admin_delete_card(
-    pk: int,
-    db: Session = Depends(get_db),
-    admin = Depends(get_current_admin)
-):
-    """管理员删除内容卡片"""
-    if not crud.delete_card(db, pk):
-        raise HTTPException(status_code=404, detail="内容卡片不存在")
-    return {"status": "success", "message": "内容卡片已删除"}
-
-
-# ============ 内容接口（用户端） ============
-@app.get("/api/content/{route_path:path}", response_model=List[schemas.ContentCardSimple])
-async def get_content(
-    route_path: str,
+# ============ 内容配置接口（用户端） ============
+@app.get("/api/content-config/{key}")
+async def get_content_config(
+    key: str,
     db: Session = Depends(get_db)
 ):
-    """用户端获取页面内容"""
-    # route_path 格式如 "shrimp/openclaw"
-    item = crud.get_content_by_route(db, f"/{route_path}")
-    if not item:
-        return []
-
-    cards = crud.get_cards_by_item(db, item.id, enabled_only=True)
-    return cards
+    """用户端获取内容配置"""
+    config = crud.get_content_config(db, key)
+    return {"key": key, "config": config or {}}
 
 
 # ============ 启动入口 ============

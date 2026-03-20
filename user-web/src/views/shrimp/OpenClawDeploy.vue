@@ -12,16 +12,16 @@
         class="service-card"
         @click="showContactModal(card)"
       >
-        <div class="card-icon">{{ card.icon || '🦐' }}</div>
+        <div class="card-icon">{{ card.icon }}</div>
         <div class="card-content">
           <h3>{{ card.title }}</h3>
           <p class="description">{{ card.description }}</p>
-          <div class="tags" v-if="card.extra_data?.tags">
-            <span v-for="tag in card.extra_data.tags" :key="tag" class="tag">{{ tag }}</span>
+          <div class="tags">
+            <span v-for="tag in card.tags" :key="tag" class="tag">{{ tag }}</span>
           </div>
-          <div class="price" v-if="card.extra_data?.price">
+          <div class="price">
             <span class="price-label">价格：</span>
-            <span class="price-value">{{ card.extra_data.price }}</span>
+            <span class="price-value">{{ card.price }}</span>
           </div>
         </div>
         <div class="card-action">
@@ -39,14 +39,14 @@
       :show-close="true"
     >
       <div class="contact-content">
-        <div class="contact-icon">{{ currentCard?.icon || '🦐' }}</div>
+        <div class="contact-icon">{{ currentCard?.icon }}</div>
         <h3>{{ currentCard?.title }}</h3>
         <p class="contact-desc">{{ currentCard?.description }}</p>
         <div class="contact-method">
           <div class="contact-label">付费安装请联系微信</div>
           <div class="contact-wechat">
             <el-icon size="20"><ChatDotRound /></el-icon>
-            <span class="wechat-id">{{ currentCard?.contact_info || 'waterborn911' }}</span>
+            <span class="wechat-id">{{ modalContent }}</span>
             <el-button type="primary" size="small" @click="copyWechat">复制</el-button>
           </div>
         </div>
@@ -61,66 +61,71 @@ import { ElMessage } from 'element-plus'
 import { ChatDotRound } from '@element-plus/icons-vue'
 import request from '../../api/request'
 
-const cards = ref([])
+// 硬编码默认数据
+const defaultCards = [
+  {
+    id: 1,
+    title: 'OpenClaw',
+    icon: '🦐',
+    description: '开源版 AI 智能体框架，支持多模型接入，适合技术团队二次开发',
+    price: '¥199起',
+    tags: ['开源', '可定制']
+  },
+  {
+    id: 2,
+    title: 'QClaw',
+    icon: '🎯',
+    description: '企业级 AI 智能体，集成主流大模型，开箱即用',
+    price: '¥599起',
+    tags: ['企业版', '技术支持']
+  },
+  {
+    id: 3,
+    title: 'AutoClaw',
+    icon: '⚡',
+    description: '自动化 AI 工作流引擎，支持任务编排和定时执行',
+    price: '¥399起',
+    tags: ['自动化', '工作流']
+  },
+  {
+    id: 4,
+    title: 'OneClaw',
+    icon: '🔹',
+    description: '轻量级单功能智能体，快速部署单一任务场景',
+    price: '¥99起',
+    tags: ['轻量', '快速部署']
+  },
+  {
+    id: 5,
+    title: 'JVS Claw',
+    icon: '🔗',
+    description: '多平台集成版，支持企业微信、钉钉、飞书等主流平台',
+    price: '¥799起',
+    tags: ['多平台', '企业集成']
+  },
+  {
+    id: 6,
+    title: 'Kimi Claw',
+    icon: '🌙',
+    description: '基于月之暗面 Kimi 模型的智能体，擅长长文本理解和生成',
+    price: '¥299起',
+    tags: ['Kimi', '长文本']
+  }
+]
+
+const cards = ref(defaultCards)
 const contactDialogVisible = ref(false)
 const currentCard = ref(null)
+const modalContent = ref('waterborn911') // 默认微信号
 
-const loadCards = async () => {
+const loadConfig = async () => {
   try {
-    const res = await request.get('/api/content/shrimp/openclaw')
-    cards.value = res
+    const res = await request.get('/api/content-config/shrimp_openclaw')
+    if (res?.config?.modal_content) {
+      modalContent.value = res.config.modal_content
+    }
   } catch (e) {
-    // 如果接口未准备好，显示默认数据
-    cards.value = [
-      {
-        id: 1,
-        title: 'OpenClaw',
-        icon: '🦐',
-        description: '开源版 AI 智能体框架，支持多模型接入，适合技术团队二次开发',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥199起', tags: ['开源', '可定制'] }
-      },
-      {
-        id: 2,
-        title: 'QClaw',
-        icon: '🎯',
-        description: '企业级 AI 智能体，集成主流大模型，开箱即用',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥599起', tags: ['企业版', '技术支持'] }
-      },
-      {
-        id: 3,
-        title: 'AutoClaw',
-        icon: '⚡',
-        description: '自动化 AI 工作流引擎，支持任务编排和定时执行',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥399起', tags: ['自动化', '工作流'] }
-      },
-      {
-        id: 4,
-        title: 'OneClaw',
-        icon: '🔹',
-        description: '轻量级单功能智能体，快速部署单一任务场景',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥99起', tags: ['轻量', '快速部署'] }
-      },
-      {
-        id: 5,
-        title: 'JVS Claw',
-        icon: '🔗',
-        description: '多平台集成版，支持企业微信、钉钉、飞书等主流平台',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥799起', tags: ['多平台', '企业集成'] }
-      },
-      {
-        id: 6,
-        title: 'Kimi Claw',
-        icon: '🌙',
-        description: '基于月之暗面 Kimi 模型的智能体，擅长长文本理解和生成',
-        contact_info: 'waterborn911',
-        extra_data: { price: '¥299起', tags: ['Kimi', '长文本'] }
-      }
-    ]
+    // 接口失败，使用默认值
   }
 }
 
@@ -130,13 +135,12 @@ const showContactModal = (card) => {
 }
 
 const copyWechat = () => {
-  const wechat = currentCard.value?.contact_info || 'waterborn911'
-  navigator.clipboard.writeText(wechat)
-  ElMessage.success('微信号已复制')
+  navigator.clipboard.writeText(modalContent.value)
+  ElMessage.success('已复制')
 }
 
 onMounted(() => {
-  loadCards()
+  loadConfig()
 })
 </script>
 
@@ -287,7 +291,7 @@ onMounted(() => {
 }
 
 .wechat-id {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: bold;
   letter-spacing: 1px;
 }

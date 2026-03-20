@@ -1,295 +1,299 @@
 <template>
   <div class="content-manage">
-    <el-row :gutter="20">
-      <!-- 左侧：分类列表 -->
-      <el-col :span="6">
-        <el-card class="category-card">
-          <template #header>
-            <div class="card-header">
-              <span>内容分类</span>
-              <el-button type="primary" size="small" @click="showCategoryDialog()">新增</el-button>
-            </div>
-          </template>
-          <el-menu :default-active="activeCategory" @select="selectCategory">
-            <el-menu-item v-for="cat in categories" :key="cat.id" :index="String(cat.id)">
-              <span>{{ cat.icon || '📁' }} {{ cat.category_name }}</span>
-              <el-button link type="primary" size="small" @click.stop="showCategoryDialog(cat)">编辑</el-button>
-            </el-menu-item>
-          </el-menu>
-        </el-card>
-      </el-col>
+    <el-card>
+      <template #header>
+        <span>内容管理</span>
+      </template>
 
-      <!-- 中间：栏目列表 -->
-      <el-col :span="6">
-        <el-card class="item-card" v-if="activeCategory">
-          <template #header>
-            <div class="card-header">
-              <span>栏目列表</span>
-              <el-button type="primary" size="small" @click="showItemDialog()">新增</el-button>
-            </div>
-          </template>
-          <el-menu :default-active="activeItem" @select="selectItem">
-            <el-menu-item v-for="item in currentItems" :key="item.id" :index="String(item.id)">
-              <span>{{ item.icon || '📄' }} {{ item.item_name }}</span>
-              <el-button link type="primary" size="small" @click.stop="showItemDialog(item)">编辑</el-button>
-            </el-menu-item>
-          </el-menu>
-        </el-card>
-        <el-empty v-else description="请先选择分类" />
-      </el-col>
+      <el-collapse v-model="activeNames" accordion>
+        <!-- 云端养虾 -->
+        <el-collapse-item title="云端养虾" name="shrimp">
+          <div class="category-desc">AI 智能体部署与 Skills 市场</div>
 
-      <!-- 右侧：卡片列表 -->
-      <el-col :span="12">
-        <el-card class="cards-card" v-if="activeItem">
-          <template #header>
-            <div class="card-header">
-              <span>内容卡片</span>
-              <el-button type="primary" size="small" @click="showCardDialog()">新增</el-button>
-            </div>
-          </template>
-          <el-table :data="currentCards" stripe>
-            <el-table-column prop="icon" label="图标" width="60" />
-            <el-table-column prop="title" label="标题" />
-            <el-table-column prop="description" label="简介" show-overflow-tooltip />
-            <el-table-column prop="contact_info" label="联系方式" width="120" />
-            <el-table-column label="操作" width="100">
-              <template #default="{ row }">
-                <el-button link type="primary" @click="showCardDialog(row)">编辑</el-button>
-                <el-button link type="danger" @click="deleteCard(row)">删除</el-button>
+          <el-collapse v-model="activeItems" accordion>
+            <el-collapse-item name="shrimp_openclaw">
+              <template #title>
+                <span class="item-title">OpenClaw 部署</span>
+                <el-switch v-model="configs.shrimp_openclaw.config.enabled" size="small" @click.stop />
               </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-        <el-empty v-else description="请先选择栏目" />
-      </el-col>
-    </el-row>
 
-    <!-- 分类对话框 -->
-    <el-dialog v-model="categoryDialogVisible" :title="categoryForm.id ? '编辑分类' : '新增分类'" width="400px">
-      <el-form :model="categoryForm" label-width="80px">
-        <el-form-item label="分类Key">
-          <el-input v-model="categoryForm.category_key" placeholder="如：shrimp, service" />
-        </el-form-item>
-        <el-form-item label="分类名称">
-          <el-input v-model="categoryForm.category_name" placeholder="如：云端养虾" />
-        </el-form-item>
-        <el-form-item label="图标">
-          <el-input v-model="categoryForm.icon" placeholder="emoji 或图标名" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="categoryForm.sort_order" :min="0" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="categoryDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCategory">保存</el-button>
-      </template>
-    </el-dialog>
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.shrimp_openclaw.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.shrimp_openclaw.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容：请私聊联系站长即可"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('shrimp_openclaw')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
 
-    <!-- 栏目对话框 -->
-    <el-dialog v-model="itemDialogVisible" :title="itemForm.id ? '编辑栏目' : '新增栏目'" width="500px">
-      <el-form :model="itemForm" label-width="80px">
-        <el-form-item label="栏目Key">
-          <el-input v-model="itemForm.item_key" placeholder="如：openclaw, skills" />
-        </el-form-item>
-        <el-form-item label="栏目名称">
-          <el-input v-model="itemForm.item_name" placeholder="如：OpenClaw部署" />
-        </el-form-item>
-        <el-form-item label="图标">
-          <el-input v-model="itemForm.icon" placeholder="emoji 或图标名" />
-        </el-form-item>
-        <el-form-item label="路由路径">
-          <el-input v-model="itemForm.route_path" placeholder="如：/shrimp/openclaw" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="itemForm.sort_order" :min="0" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="itemDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveItem">保存</el-button>
-      </template>
-    </el-dialog>
+            <el-collapse-item name="shrimp_skills">
+              <template #title>
+                <span class="item-title">Skills 市场</span>
+                <el-switch v-model="configs.shrimp_skills.config.enabled" size="small" @click.stop />
+              </template>
 
-    <!-- 卡片对话框 -->
-    <el-dialog v-model="cardDialogVisible" :title="cardForm.id ? '编辑卡片' : '新增卡片'" width="600px">
-      <el-form :model="cardForm" label-width="80px">
-        <el-form-item label="标题">
-          <el-input v-model="cardForm.title" placeholder="如：OpenClaw" />
-        </el-form-item>
-        <el-form-item label="图标">
-          <el-input v-model="cardForm.icon" placeholder="emoji" />
-        </el-form-item>
-        <el-form-item label="简介">
-          <el-input v-model="cardForm.description" type="textarea" :rows="3" placeholder="产品简介" />
-        </el-form-item>
-        <el-form-item label="联系方式">
-          <el-input v-model="cardForm.contact_info" placeholder="如：微信号 waterborn911" />
-        </el-form-item>
-        <el-form-item label="扩展数据">
-          <el-input v-model="extraDataJson" type="textarea" :rows="3" placeholder='JSON 格式，如：{"price": "¥99", "tag": "热门"}' />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="cardForm.sort_order" :min="0" />
-        </el-form-item>
-        <el-form-item label="启用">
-          <el-switch v-model="cardForm.is_enabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="cardDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveCard">保存</el-button>
-      </template>
-    </el-dialog>
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.shrimp_skills.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.shrimp_skills.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('shrimp_skills')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="shrimp_ai_staff">
+              <template #title>
+                <span class="item-title">AI 员工打造</span>
+                <el-switch v-model="configs.shrimp_ai_staff.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.shrimp_ai_staff.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.shrimp_ai_staff.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('shrimp_ai_staff')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+          </el-collapse>
+        </el-collapse-item>
+
+        <!-- 跨境服务资源 -->
+        <el-collapse-item title="跨境服务资源" name="service">
+          <div class="category-desc">跨境电商一站式服务资源</div>
+
+          <el-collapse v-model="activeItems" accordion>
+            <el-collapse-item name="service_shop">
+              <template #title>
+                <span class="item-title">店铺买卖/租赁</span>
+                <el-switch v-model="configs.service_shop.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_shop.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_shop.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_shop')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="service_course">
+              <template #title>
+                <span class="item-title">课程+陪跑</span>
+                <el-switch v-model="configs.service_course.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_course.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_course.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_course')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="service_logistics">
+              <template #title>
+                <span class="item-title">货代/小包/海外仓</span>
+                <el-switch v-model="configs.service_logistics.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_logistics.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_logistics.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_logistics')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="service_software">
+              <template #title>
+                <span class="item-title">增强软件</span>
+                <el-switch v-model="configs.service_software.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_software.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_software.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_software')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="service_network">
+              <template #title>
+                <span class="item-title">网络&硬件服务</span>
+                <el-switch v-model="configs.service_network.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_network.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_network.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_network')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+
+            <el-collapse-item name="service_other">
+              <template #title>
+                <span class="item-title">其他合作</span>
+                <el-switch v-model="configs.service_other.config.enabled" size="small" @click.stop />
+              </template>
+
+              <el-form label-width="100px" class="config-form">
+                <el-form-item label="是否展示">
+                  <el-switch v-model="configs.service_other.config.enabled" />
+                </el-form-item>
+                <el-form-item label="弹窗内容">
+                  <el-input
+                    v-model="configs.service_other.config.modal_content"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="不填则显示默认内容"
+                  />
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="primary" @click="saveConfig('service_other')">保存</el-button>
+                </el-form-item>
+              </el-form>
+            </el-collapse-item>
+          </el-collapse>
+        </el-collapse-item>
+      </el-collapse>
+    </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import request from '@/api/request'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
-const categories = ref([])
-const activeCategory = ref(null)
-const activeItem = ref(null)
+const activeNames = ref(['shrimp'])
+const activeItems = ref([])
 
-const categoryDialogVisible = ref(false)
-const itemDialogVisible = ref(false)
-const cardDialogVisible = ref(false)
+// 默认配置
+const defaultConfig = {
+  enabled: true,
+  modal_content: ''
+}
 
-const categoryForm = ref({ category_key: '', category_name: '', icon: '', sort_order: 0 })
-const itemForm = ref({ item_key: '', item_name: '', icon: '', route_path: '', sort_order: 0 })
-const cardForm = ref({ title: '', icon: '', description: '', contact_info: '', extra_data: null, sort_order: 0, is_enabled: true })
-const extraDataJson = ref('')
+// 所有配置
+const configKeys = [
+  'shrimp_openclaw', 'shrimp_skills', 'shrimp_ai_staff',
+  'service_shop', 'service_course', 'service_logistics',
+  'service_software', 'service_network', 'service_other'
+]
 
-const currentItems = computed(() => {
-  const cat = categories.value.find(c => c.id === Number(activeCategory.value))
-  return cat?.items || []
+const configs = reactive({})
+
+// 初始化配置
+configKeys.forEach(key => {
+  configs[key] = { config: { ...defaultConfig } }
 })
 
-const currentCards = computed(() => {
-  const item = currentItems.value.find(i => i.id === Number(activeItem.value))
-  return item?.cards || []
-})
-
-const loadCategories = async () => {
+const loadConfigs = async () => {
   try {
-    const res = await request.get('/admin/content/categories')
-    categories.value = res
-  } catch (e) {
-    ElMessage.error('加载失败')
-  }
-}
-
-const selectCategory = (id) => {
-  activeCategory.value = id
-  activeItem.value = null
-}
-
-const selectItem = (id) => {
-  activeItem.value = id
-}
-
-// 分类操作
-const showCategoryDialog = (cat = null) => {
-  if (cat) {
-    categoryForm.value = { ...cat }
-  } else {
-    categoryForm.value = { category_key: '', category_name: '', icon: '', sort_order: 0 }
-  }
-  categoryDialogVisible.value = true
-}
-
-const saveCategory = async () => {
-  try {
-    if (categoryForm.value.id) {
-      await request.put(`/admin/content/categories/${categoryForm.value.id}`, categoryForm.value)
-    } else {
-      await request.post('/admin/content/categories', categoryForm.value)
-    }
-    ElMessage.success('保存成功')
-    categoryDialogVisible.value = false
-    loadCategories()
-  } catch (e) {
-    ElMessage.error('保存失败')
-  }
-}
-
-// 栏目操作
-const showItemDialog = (item = null) => {
-  if (item) {
-    itemForm.value = { ...item }
-  } else {
-    itemForm.value = { item_key: '', item_name: '', icon: '', route_path: '', sort_order: 0 }
-  }
-  itemDialogVisible.value = true
-}
-
-const saveItem = async () => {
-  try {
-    if (itemForm.value.id) {
-      await request.put(`/admin/content/items/${itemForm.value.id}`, itemForm.value)
-    } else {
-      await request.post(`/admin/content/categories/${activeCategory.value}/items`, itemForm.value)
-    }
-    ElMessage.success('保存成功')
-    itemDialogVisible.value = false
-    loadCategories()
-  } catch (e) {
-    ElMessage.error('保存失败')
-  }
-}
-
-// 卡片操作
-const showCardDialog = (card = null) => {
-  if (card) {
-    cardForm.value = { ...card }
-    extraDataJson.value = card.extra_data ? JSON.stringify(card.extra_data, null, 2) : ''
-  } else {
-    cardForm.value = { title: '', icon: '', description: '', contact_info: '', extra_data: null, sort_order: 0, is_enabled: true }
-    extraDataJson.value = ''
-  }
-  cardDialogVisible.value = true
-}
-
-const saveCard = async () => {
-  try {
-    // 解析 JSON
-    if (extraDataJson.value.trim()) {
-      try {
-        cardForm.value.extra_data = JSON.parse(extraDataJson.value)
-      } catch {
-        ElMessage.warning('扩展数据 JSON 格式错误')
-        return
+    const res = await request.get('/admin/content-configs')
+    Object.keys(res).forEach(key => {
+      if (configs[key]) {
+        configs[key].config = { ...defaultConfig, ...res[key].config }
       }
-    }
-
-    if (cardForm.value.id) {
-      await request.put(`/admin/content/cards/${cardForm.value.id}`, cardForm.value)
-    } else {
-      await request.post(`/admin/content/items/${activeItem.value}/cards`, cardForm.value)
-    }
-    ElMessage.success('保存成功')
-    cardDialogVisible.value = false
-    loadCategories()
+    })
   } catch (e) {
-    ElMessage.error('保存失败')
+    ElMessage.error('加载配置失败')
   }
 }
 
-const deleteCard = async (card) => {
+const saveConfig = async (key) => {
   try {
-    await ElMessageBox.confirm('确定删除该卡片？', '提示', { type: 'warning' })
-    await request.delete(`/admin/content/cards/${card.id}`)
-    ElMessage.success('删除成功')
-    loadCategories()
+    await request.put(`/admin/content-configs/${key}`, {
+      config: configs[key].config
+    })
+    ElMessage.success('保存成功')
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    ElMessage.error('保存失败')
   }
 }
 
 onMounted(() => {
-  loadCategories()
+  loadConfigs()
 })
 </script>
 
@@ -298,19 +302,31 @@ onMounted(() => {
   padding: 0;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.category-desc {
+  color: #999;
+  font-size: 13px;
+  margin-bottom: 15px;
+  padding-left: 10px;
 }
 
-.category-card, .item-card, .cards-card {
-  min-height: 500px;
+.item-title {
+  font-weight: 500;
 }
 
-.el-menu-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.config-form {
+  margin-top: 15px;
+  padding: 15px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+:deep(.el-collapse-item__header) {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+:deep(.el-collapse-item__content) {
+  padding: 10px 0;
 }
 </style>

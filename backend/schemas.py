@@ -225,112 +225,15 @@ class ErrorResponse(BaseModel):
     detail: Optional[str] = None
 
 
-# ============ 内容管理相关 ============
-class ContentCardBase(BaseModel):
-    title: str
+class ContentConfigUpdate(BaseModel):
+    config: Dict[str, Any]
+
+
+class ContentConfigResponse(BaseModel):
+    key: str
+    config: Dict[str, Any]
     description: Optional[str] = None
-    icon: Optional[str] = None
-    contact_info: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
-    sort_order: int = 0
-    is_enabled: bool = True
-
-
-class ContentCardCreate(ContentCardBase):
-    pass
-
-
-class ContentCardUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    contact_info: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
-    sort_order: Optional[int] = None
-    is_enabled: Optional[bool] = None
-
-
-class ContentCardResponse(ContentCardBase):
-    id: int
-    item_id: int
-    create_time: datetime
     update_time: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class ContentItemBase(BaseModel):
-    item_key: str
-    item_name: str
-    icon: Optional[str] = None
-    route_path: Optional[str] = None
-    sort_order: int = 0
-    is_enabled: bool = True
-
-
-class ContentItemCreate(ContentItemBase):
-    cards: Optional[List[ContentCardCreate]] = None
-
-
-class ContentItemUpdate(BaseModel):
-    item_key: Optional[str] = None
-    item_name: Optional[str] = None
-    icon: Optional[str] = None
-    route_path: Optional[str] = None
-    sort_order: Optional[int] = None
-    is_enabled: Optional[bool] = None
-
-
-class ContentItemResponse(ContentItemBase):
-    id: int
-    category_id: int
-    cards: List[ContentCardResponse] = []
-    create_time: datetime
-    update_time: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class ContentCategoryBase(BaseModel):
-    category_key: str
-    category_name: str
-    icon: Optional[str] = None
-    sort_order: int = 0
-    is_enabled: bool = True
-
-
-class ContentCategoryCreate(ContentCategoryBase):
-    items: Optional[List[ContentItemCreate]] = None
-
-
-class ContentCategoryUpdate(BaseModel):
-    category_key: Optional[str] = None
-    category_name: Optional[str] = None
-    icon: Optional[str] = None
-    sort_order: Optional[int] = None
-    is_enabled: Optional[bool] = None
-
-
-class ContentCategoryResponse(ContentCategoryBase):
-    id: int
-    items: List[ContentItemResponse] = []
-    create_time: datetime
-    update_time: datetime
-
-    class Config:
-        from_attributes = True
-
-
-# 用户端简化响应
-class ContentCardSimple(BaseModel):
-    id: int
-    title: str
-    description: Optional[str] = None
-    icon: Optional[str] = None
-    contact_info: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
