@@ -241,26 +241,67 @@ export const getVideoStatus = (taskId, model) => {
 }
 
 /**
- * 生成图片
- * @param {object} data - { model, prompt, size, images }
+ * 生成图片 (参考旧项目 MyWebTool 的 generate_image_workflow)
+ * @param {object} data - { model, prompt, aspect_ratio, resolution, images, seed }
  */
 export const generateImage = (data) => {
-  const { model, prompt, size, images } = data
+  const { prompt, aspect_ratio, resolution, images, seed } = data
 
-  const payload = {
-    model,
-    prompt,
-    response_format: 'url'
+  // 计算尺寸 (复刻旧项目逻辑)
+  const ratioMap = {
+    '1:1': [1, 1], '2:3': [2, 3], '3:2': [3, 2], '3:4': [3, 4], '4:3': [4, 3],
+    '4:5': [4, 5], '5:4': [5, 4], '9:16': [9, 16], '16:9': [16, 9], '21:9': [21, 9]
+  }
+  const sizeMap = { '1K': 1024, '2K': 2048, '4K': 4096 }
+
+  const ratio = aspect_ratio || '3:4'
+  const res = resolution || '1K'
+  const [wRatio, hRatio] = ratioMap[ratio] || [1, 1]
+  const baseSize = sizeMap[res] || 1024
+
+  let width, height
+  if (wRatio >= hRatio) {
+    width = baseSize
+    height = Math.round(baseSize * hRatio / wRatio)
+  } else {
+    height = baseSize
+    width = Math.round(baseSize * wRatio / hRatio)
+  }
+  const pixelSize = `${width}x${height}`
+
+  // 确定模型
+  const modelName = resolution === '4K' ? 'nano-banana-2-4k' : 'nano-banana-2'
+
+  // 处理 seed
+  const finalSeed = seed && seed !== -1 ? seed : Date.now()
+
+  // 构建最终 prompt
+  const finalPrompt = `${prompt} --seed ${finalSeed}`
+
+  // 处理参考图 (只取前5张)
+  let imgList = null
+  if (images && images.length > 0) {
+    imgList = images.slice(0, 5).map(img => {
+      if (!img.startsWith('data:image')) {
+        return `data:image/jpeg;base64,${img}`
+      }
+      return img
+    })
   }
 
-  if (size) payload.size = size
-  if (images && images.length > 0) payload.image = images
+  const payload = {
+    model: modelName,
+    prompt: finalPrompt,
+    size: pixelSize,
+    response_format: 'url',
+    image: imgList
+  }
 
   return callAI(
     AI_ENDPOINTS.GENERATE_IMAGE.placeholder,
     AI_ENDPOINTS.GENERATE_IMAGE.url,
     payload,
-    { timeout: 60000 }
+    { timeout: 120000 }
   )
 }
 
@@ -295,7 +336,7 @@ ${text}
 }
 
 /**
- * 生图提示词规划
+ * 生图提示词规划 (参考旧项目 MyWebTool 的详细 Prompt)
  * @param {object} data - { images, product_type, selling_points, design_style, target_lang, num_screens }
  */
 export const planImagePrompts = (data) => {
@@ -303,41 +344,81 @@ export const planImagePrompts = (data) => {
 
   const productType = product_type || '通用产品'
   const designStyle = design_style || '现代简约'
-  const targetLang = target_lang || 'Chinese'
+  const targetLang = target_lang || '中文'
   const numScreens = num_screens || 1
 
-  const promptText = `
-[Role] Expert E-commerce Visual Designer.
-[Task] Plan ${numScreens} distinct image generation prompts for a product detail page.
+  // 语言映射
+  const langMap = {
+    "中文": "Chinese", "简体中文": "Simplified Chinese", "繁体中文": "Traditional Chinese",
+    "英语": "English", "英文": "English", "日语": "Japanese", "日文": "Japanese",
+    "韩语": "Korean", "韩文": "Korean", "法语": "French", "德语": "German",
+    "俄语": "Russian", "西班牙语": "Spanish", "葡萄牙语": "Portuguese", "意大利语": "Italian",
+    "荷兰语": "Dutch", "波兰语": "Polish", "瑞典语": "Swedish",
+    "越南语": "Vietnamese", "泰语": "Thai", "印尼语": "Indonesian",
+    "马来语": "Malay", "菲律宾语": "Filipino", "印地语": "Hindi",
+    "阿拉伯语": "Arabic", "土耳其语": "Turkish"
+  }
+  const langEng = langMap[targetLang] || 'Chinese'
 
-[Product Info]
-- Product: ${productType}
-- Selling Points: ${selling_points}
-- Design Style: ${designStyle}
-- Target Language: ${targetLang}
+  // 详细 System Instruction (复刻旧项目)
+  const systemInstruction = `[角色] 你是一名资深电商详情页设计师与 AI 文生图提示词工程师。
+[任务目标] 根据产品信息，规划并生成 **${numScreens} 屏** 详情页的文生图提示词。
 
-[Output Format]
-Return a JSON array with ${numScreens} prompt strings. Each prompt should be detailed and suitable for AI image generation.
-Example: ["prompt 1...", "prompt 2...", "prompt 3..."]
+[强制语言规则 - STRICTLY ENFORCED]
+1. **目标语言锁定**：所有的"主文案"和"副文案"必须严格使用 **${langEng}**。
+2. **拒绝干扰**：即使用户的【核心卖点】或【产品名称】中包含其他语言（如英文、中文混合），你必须将其翻译或转换为 **${langEng}** 输出。
+3. **纯净性**：绝对禁止中英混杂。如果是英文目标语言，不要出现任何汉字；如果是中文目标语言，不要出现非必要的英文。
 
-[Requirements]
-1. Each prompt should describe a complete scene
-2. Include product placement, lighting, background
-3. Make prompts suitable for e-commerce use
-4. Output ONLY the JSON array, no other text
-`
+[视觉纯净规则 - 绝对禁止]
+1. **文字隔离**：画面中除主副文案外，**严禁**出现任何装饰性汉字、印章。
+2. **字体隔离**：必须使用国际通用术语：如 "Sans-serif", "Serif", "Bold Modern Font"。
+3. **元素隔离**：必须使用符合该语言语境的背景元素。
+
+[强制执行规则]
+1. **数量严格匹配**：用户要求生成 ${numScreens} 屏，你必须输出 **${numScreens} 条** 独立的提示词。
+2. **输出结构**：每屏内容必须包含："主文案、副文案、设计与排版、画面主体与构图、画质与细节"。
+3. **多图参考**：用户提供了多张参考图，请综合分析这些图片的特征（角度、细节、场景）来规划画面。
+
+[输出格式模板]
+请严格按照以下格式输出（不要输出表格，只输出文本段落）：
+
+第1屏：
+主文案："..."
+副文案："..."
+文案设计与排版：...
+画面主体与构图：...
+画质与细节：...
+
+第2屏：
+...
+（以此类推，直到第 ${numScreens} 屏）`
+
+  // 用户请求
+  const userReq = `【产品信息】
+1. 产品类型: ${productType}
+2. 核心卖点: ${selling_points || ''}
+3. 设计风格: ${designStyle}
+
+【重要配置】
+**目标语言 (Target Language): ${langEng}** (请确保文案只使用 ${langEng})
+
+【执行要求】
+请基于以上信息，发挥创意，规划出 **${numScreens} 屏** 的画面。
+(请参考附带的所有图片作为产品外观依据)
+
+请直接开始按顺序输出每一屏的内容。`
 
   // 构建消息内容
-  const content = [{ type: 'text', text: promptText }]
+  const userContent = [{ type: 'text', text: userReq }]
 
   // 添加图片
-  const validImages = (images || []).filter(img => img).slice(0, 3)
+  const validImages = (images || []).filter(img => img).slice(0, 5)
   for (const imgBase64 of validImages) {
     let imgUrl = imgBase64
     if (!imgBase64.startsWith('data:image')) {
       imgUrl = `data:image/jpeg;base64,${imgBase64}`
     }
-    content.push({
+    userContent.push({
       type: 'image_url',
       image_url: { url: imgUrl }
     })
@@ -348,10 +429,13 @@ Example: ["prompt 1...", "prompt 2...", "prompt 3..."]
     AI_ENDPOINTS.ANALYZE_IMAGES.url,
     {
       model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
-      messages: [{ role: 'user', content }],
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userContent }
+      ],
       max_tokens: 4000,
       temperature: 0.7
     },
-    { timeout: 120000 }
+    { timeout: 180000 }
   )
 }

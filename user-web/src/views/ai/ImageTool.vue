@@ -208,7 +208,7 @@
 <script setup>
 import { reactive, ref, onMounted, watch } from 'vue'
 import request from '../../api/request'
-import { analyzeImages as analyzeImagesAPI, translateText as translateTextAPI, planImagePrompts as planImagePromptsAPI } from '../../api/index'
+import { analyzeImages as analyzeImagesAPI, translateText as translateTextAPI, planImagePrompts as planImagePromptsAPI, generateImage as generateImageAPI } from '../../api/index'
 import { Plus, ZoomIn, Edit, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { saveAs } from 'file-saver'
@@ -417,19 +417,48 @@ const generateImage = async () => {
       num_screens: form.num_images
     })
 
-    // 解析响应
+    // 解析响应 (支持详细文本格式和 JSON 格式)
     const content = res.choices?.[0]?.message?.content || ''
 
     // 尝试解析 JSON 数组
     try {
       // 清理可能的 markdown 代码块
       let cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      promptList = JSON.parse(cleanContent)
-      if (!Array.isArray(promptList)) {
-        promptList = [cleanContent]
+
+      // 首先尝试 JSON 解析
+      try {
+        promptList = JSON.parse(cleanContent)
+        if (!Array.isArray(promptList)) {
+          promptList = [String(promptList)]
+        }
+      } catch {
+        // 如果不是 JSON，按 "第N屏" 分割 (复刻旧项目逻辑)
+        const parts = content.split(/["']?第\d+屏["\']?[：:]/)
+        promptList = parts
+          .map(p => p.trim())
+          .filter(p => p.length > 10)
+          .map(p => {
+            // 提取完整内容作为一个 prompt
+            // 如果包含主文案等结构，提取关键信息
+            const mainTextMatch = p.match(/主文案[：:]["'""]([^"'""]+)["'""]/)
+            const subTextMatch = p.match(/副文案[：:]["'""]([^"'""]+)["'""]/)
+            const designMatch = p.match(/文案设计与排版[：:](.+?)(?=画面主体|$)/s)
+            const sceneMatch = p.match(/画面主体与构图[：:](.+?)(?=画质|$)/s)
+            const qualityMatch = p.match(/画质与细节[：:](.+?)$/s)
+
+            // 构建完整的 prompt
+            let prompt = ''
+            if (mainTextMatch) prompt += `Main text: "${mainTextMatch[1]}". `
+            if (subTextMatch) prompt += `Subtitle: "${subTextMatch[1]}". `
+            if (designMatch) prompt += designMatch[1].trim() + '. '
+            if (sceneMatch) prompt += sceneMatch[1].trim() + '. '
+            if (qualityMatch) prompt += qualityMatch[1].trim()
+
+            return prompt || p
+          })
       }
     } catch {
-      // 如果不是 JSON，按行分割
+      // 最后兜底
       promptList = content.split('\n').filter(line => line.trim().length > 20)
     }
 
@@ -438,7 +467,10 @@ const generateImage = async () => {
     }
 
     emit('log', `方案规划完成，共 ${promptList.length} 个方案`)
-    promptList.forEach((p, index) => emit('log', `[方案 ${index + 1}]: ${p.substring(0, 100)}...`))
+    // 完整输出每个方案 (不截断)
+    promptList.forEach((p, index) => {
+      emit('log', `[方案 ${index + 1}]:\n${p}`)
+    })
   } catch (e) {
     ElMessage.error('方案规划失败')
     emit('log', `规划失败: ${e.message || e}`)
@@ -455,16 +487,25 @@ const generateImage = async () => {
     const currentPrompt = promptList[i]
     emit('log', `[第 ${i+1}/${promptList.length} 张] 正在请求云端绘图...`)
     try {
-      const payload = { ...form, ref_images: imageBase64List.value, num_images: 1, specific_prompt: currentPrompt }
-      const res = await request.post('/api/generate/image', payload)
-      if (res.status === 'success') {
-        generatedImages.value.unshift(res.url)
+      // 通过腾讯云函数代理调用 T8Star 图片生成 API
+      const res = await generateImageAPI({
+        prompt: currentPrompt,
+        aspect_ratio: form.aspect_ratio,
+        resolution: form.resolution,
+        images: imageBase64List.value,
+        seed: form.seed
+      })
+
+      // 解析响应
+      const url = res.data?.[0]?.url || res.data?.url
+      if (url) {
+        generatedImages.value.unshift(url)
         emit('refresh-points')
         emit('log', `第 ${i+1} 张生成成功！`)
         successCount++
       } else {
         ElMessage.error(`第 ${i+1} 张失败`)
-        emit('log', `第 ${i+1} 张服务端拒绝: ${res.msg}`)
+        emit('log', `第 ${i+1} 张服务端拒绝: ${JSON.stringify(res)}`)
       }
     } catch (e) {
       let errMsg = e.message || '未知错误'
