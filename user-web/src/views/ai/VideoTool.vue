@@ -333,50 +333,27 @@ const analyzeImages = async () => {
   emit('log', '开始分析图片...')
 
   try {
-    const configRes = await request.get('/api/config/pricing-info')
-    const CLOUD_FUNCTION_URL = configRes.tencent_function_url || ''
-
-    if (!CLOUD_FUNCTION_URL) {
-      throw new Error('腾讯云函数 URL 未配置')
-    }
-
-    const userPrompt = `产品名称：${dynamicFormData.product_type || '未知产品'}。请根据图片提取产品的核心卖点。直接返回商品卖点文案即可，不要多余废话。`
-
-    const contentArray = [{ type: "text", text: userPrompt }]
-    imageBase64List.value.forEach(base64 => {
-      contentArray.push({ type: "image_url", image_url: { url: base64 } })
+    // 调用新的 AI 接口，使用管理后台配置的提示词模板
+    const res = await request.post('/api/ai/selling-points', {
+      images: imageBase64List.value,
+      product_type: dynamicFormData.product_type || '通用产品',
+      design_style: dynamicFormData.style || '简约风格',
+      target_lang: dynamicFormData.language || '中文',
+      target_num: 1
     })
 
-    const requestBody = {
-      target_url: 'https://api-inference.modelscope.cn/v1/chat/completions',
-      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
-      messages: [{ role: "user", content: contentArray }]
-    }
-
-    const response = await fetch(CLOUD_FUNCTION_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer MODELSCOPE_API_KEY`
-      },
-      body: JSON.stringify(requestBody)
-    })
-
-    if (!response.ok) throw new Error(`请求失败: ${response.status}`)
-
-    const data = await response.json()
-    const content = data.choices?.[0]?.message?.content || ""
-
-    if (content) {
-      dynamicFormData.selling_points = content
+    if (res.status === 'success') {
+      dynamicFormData.selling_points = res.content
       ElMessage.success('文案生成成功！')
       emit('log', '文案生成成功！')
     } else {
-      ElMessage.error('未能解析出文案')
+      ElMessage.error('分析失败: ' + (res.msg || '未知错误'))
+      emit('log', '分析失败: ' + (res.msg || '未知错误'))
     }
   } catch (e) {
     console.error('分析失败', e)
     ElMessage.error('分析失败: ' + (e.message || '未知错误'))
+    emit('log', '分析失败: ' + (e.message || '未知错误'))
   } finally {
     analyzing.value = false
   }

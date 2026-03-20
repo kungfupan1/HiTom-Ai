@@ -334,45 +334,128 @@ const editImage = async () => {
 
 const analyzeImages = async () => {
   if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传图片')
-  analyzing.value = true; const pType = form.product_type || "通用产品"; const count = form.num_images || 1; emit('log', `正在分析 ${imageBase64List.value.length} 张图片...`)
+  analyzing.value = true
+  const pType = form.product_type || "通用产品"
+  const count = form.num_images || 1
+  emit('log', `正在分析 ${imageBase64List.value.length} 张图片...`)
   try {
-    const res = await request.post('/api/analyze/images', { images: imageBase64List.value, product_type: pType, design_style: form.design_style, target_lang: form.target_lang, target_num: count })
+    // 调用新的 AI 接口，使用管理后台配置的提示词模板
+    const res = await request.post('/api/ai/selling-points', {
+      images: imageBase64List.value,
+      product_type: pType,
+      design_style: form.design_style,
+      target_lang: form.target_lang,
+      target_num: count
+    })
     if (res.status === 'success') {
-      let cleanContent = res.content; if (cleanContent.includes("Set 1:")) { cleanContent = cleanContent.replace(/Set \d+:/g, "").trim() }
-      form.selling_points = cleanContent; ElMessage.success('卖点生成成功')
-    } else { emit('log', `分析失败: ${res.msg}`); ElMessage.error(res.msg) }
-  } catch (e) { ElMessage.error('分析失败'); emit('log', `网络请求错误: ${e}`) } finally { analyzing.value = false }
+      let cleanContent = res.content
+      if (cleanContent.includes("Set 1:")) {
+        cleanContent = cleanContent.replace(/Set \d+:/g, "").trim()
+      }
+      form.selling_points = cleanContent
+      ElMessage.success('卖点生成成功')
+    } else {
+      emit('log', `分析失败: ${res.msg}`)
+      ElMessage.error(res.msg)
+    }
+  } catch (e) {
+    ElMessage.error('分析失败')
+    emit('log', `网络请求错误: ${e}`)
+  } finally {
+    analyzing.value = false
+  }
 }
 
 const translateText = async () => {
-    if(!form.selling_points) return ElMessage.warning('请先输入文案')
-    translating.value = true; emit('log', `正在将文案翻译为：${form.target_lang}...`)
-    try {
-        const res = await request.post('/api/translate', { text: form.selling_points, target_lang: form.target_lang })
-        if(res.status === 'success') { form.selling_points = res.content; ElMessage.success('翻译完成'); emit('log', `翻译成功`) } else { emit('log', `翻译失败: ${res.msg}`) }
-    } catch(e) { ElMessage.error('翻译失败') } finally { translating.value = false }
+  if (!form.selling_points) return ElMessage.warning('请先输入文案')
+  translating.value = true
+  emit('log', `正在将文案翻译为：${form.target_lang}...`)
+  try {
+    // 调用新的 AI 翻译接口，使用管理后台配置的提示词模板
+    const res = await request.post('/api/ai/translate', {
+      text: form.selling_points,
+      target_lang: form.target_lang
+    })
+    if (res.status === 'success') {
+      form.selling_points = res.content
+      ElMessage.success('翻译完成')
+      emit('log', `翻译成功`)
+    } else {
+      emit('log', `翻译失败: ${res.msg}`)
+    }
+  } catch (e) {
+    ElMessage.error('翻译失败')
+  } finally {
+    translating.value = false
+  }
 }
 
 const generateImage = async () => {
   if (!form.product_type || !form.selling_points) return ElMessage.warning('请填写完整信息')
-  loading.value = true; stopped.value = false; let successCount = 0; emit('log', `正在规划 ${form.num_images} 张图片的拍摄方案...`); let promptList = []
+  loading.value = true
+  stopped.value = false
+  let successCount = 0
+  emit('log', `正在规划 ${form.num_images} 张图片的拍摄方案...`)
+  let promptList = []
+
   try {
-      const payload = { ...form, ref_images: imageBase64List.value }
-      const resPlan = await request.post('/api/plan/images', payload)
-      if (resPlan.status === 'success') {
-          promptList = resPlan.prompts; emit('log', `方案规划完成`); promptList.forEach((p, index) => emit('log', `[方案 ${index + 1}]: ${p}\n---`))
-      } else { throw new Error(resPlan.msg) }
-  } catch (e) { ElMessage.error('方案规划失败'); emit('log', `规划失败: ${e.message}`); loading.value = false; return }
+    // 调用新的 AI 提示词规划接口，使用管理后台配置的提示词模板
+    const resPlan = await request.post('/api/ai/plan-image-prompts', {
+      images: imageBase64List.value,
+      product_type: form.product_type,
+      selling_points: form.selling_points,
+      design_style: form.design_style,
+      target_lang: form.target_lang,
+      num_screens: form.num_images
+    })
+    if (resPlan.status === 'success') {
+      promptList = resPlan.prompts
+      emit('log', `方案规划完成`)
+      promptList.forEach((p, index) => emit('log', `[方案 ${index + 1}]: ${p}\n---`))
+    } else {
+      throw new Error(resPlan.msg)
+    }
+  } catch (e) {
+    ElMessage.error('方案规划失败')
+    emit('log', `规划失败: ${e.message}`)
+    loading.value = false
+    return
+  }
+
   emit('log', `开始批量渲染 (共 ${promptList.length} 张)...`)
   for (let i = 0; i < promptList.length; i++) {
-      if (stopped.value) { emit('log', '任务已手动停止'); break; }
-      const currentPrompt = promptList[i]; emit('log', `[第 ${i+1}/${promptList.length} 张] 正在请求云端绘图...`)
-      try {
-          const payload = { ...form, ref_images: imageBase64List.value, num_images: 1, specific_prompt: currentPrompt }; const res = await request.post('/api/generate/image', payload)
-          if (res.status === 'success') { generatedImages.value.unshift(res.url); emit('refresh-points'); emit('log', `第 ${i+1} 张生成成功！`); successCount++ } else { ElMessage.error(`第 ${i+1} 张失败`); emit('log', `第 ${i+1} 张服务端拒绝: ${res.msg}`) }
-      } catch (e) { let errMsg = e.message || '未知错误'; if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'; ElMessage.error(`第 ${i+1} 张请求出错`); emit('log', `第 ${i+1} 张异常: ${errMsg}`) }
+    if (stopped.value) {
+      emit('log', '任务已手动停止')
+      break
+    }
+    const currentPrompt = promptList[i]
+    emit('log', `[第 ${i+1}/${promptList.length} 张] 正在请求云端绘图...`)
+    try {
+      const payload = { ...form, ref_images: imageBase64List.value, num_images: 1, specific_prompt: currentPrompt }
+      const res = await request.post('/api/generate/image', payload)
+      if (res.status === 'success') {
+        generatedImages.value.unshift(res.url)
+        emit('refresh-points')
+        emit('log', `第 ${i+1} 张生成成功！`)
+        successCount++
+      } else {
+        ElMessage.error(`第 ${i+1} 张失败`)
+        emit('log', `第 ${i+1} 张服务端拒绝: ${res.msg}`)
+      }
+    } catch (e) {
+      let errMsg = e.message || '未知错误'
+      if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'
+      ElMessage.error(`第 ${i+1} 张请求出错`)
+      emit('log', `第 ${i+1} 张异常: ${errMsg}`)
+    }
   }
-  loading.value = false; stopped.value = false; if (successCount > 0) { ElMessage.success(`任务结束，成功 ${successCount} 张`); emit('log', `任务全部结束`) }
+
+  loading.value = false
+  stopped.value = false
+  if (successCount > 0) {
+    ElMessage.success(`任务结束，成功 ${successCount} 张`)
+    emit('log', `任务全部结束`)
+  }
 }
 
 const stopTask = () => { stopped.value = true; loading.value = false; emit('log', '用户请求停止任务...'); ElMessage.info('已请求停止后续任务') }

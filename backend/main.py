@@ -16,6 +16,7 @@ import crud
 import schemas
 from utils import hash_password, verify_password, create_access_token, decode_token
 from engines.payload_builder import payload_builder
+from ai_service import AIService
 
 # 创建应用
 app = FastAPI(
@@ -609,6 +610,191 @@ async def get_api_key_for_vercel(
     if not key:
         raise HTTPException(status_code=404, detail=f"未找到 {provider} 的 API Key")
     return {"key": key}
+
+
+# ============ AI 提示词生成接口 ============
+
+class SellingPointsRequest(BaseModel):
+    """看图写卖点请求"""
+    images: List[str]  # 图片 base64 列表
+    product_type: str = "通用产品"
+    design_style: str = "简约风格"
+    target_lang: str = "中文"
+    target_num: int = 1
+
+
+class PlanImagePromptsRequest(BaseModel):
+    """生图提示词规划请求"""
+    images: List[str] = []  # 参考图片
+    product_type: str = ""
+    selling_points: str = ""
+    design_style: str = "简约风格"
+    target_lang: str = "中文"
+    num_screens: int = 1
+
+
+class VideoScriptRequest(BaseModel):
+    """视频分镜生成请求"""
+    images: List[str] = []  # 参考图片
+    product_type: str = ""
+    selling_points: str = ""
+    region: str = "东亚"
+    target_lang: str = "中文"
+    category: str = "通用"
+    style: str = "UGC 种草"
+    has_subtitle: bool = True
+
+
+class TranslateRequest(BaseModel):
+    """翻译请求"""
+    text: str
+    target_lang: str = "中文"
+
+
+@app.post("/api/ai/selling-points")
+async def generate_selling_points(
+    request: SellingPointsRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    看图写卖点 - 使用管理后台配置的系统提示词
+
+    根据产品图片生成多组卖点文案
+    """
+    # 获取 ModelScope API Key
+    modelscope_key = crud.get_random_api_key(db, "modelscope")
+    if not modelscope_key:
+        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+
+    # 获取提示词模板
+    prompt_template = crud.get_config(db, "image_selling_points_prompt", "")
+    if not prompt_template:
+        raise HTTPException(status_code=400, detail="未配置看图写卖点提示词")
+
+    # 调用 AI 服务
+    ai = AIService(modelscope_api_key=modelscope_key)
+    result = ai.generate_selling_points(
+        prompt_template=prompt_template,
+        images=request.images,
+        product_type=request.product_type,
+        design_style=request.design_style,
+        target_lang=request.target_lang,
+        target_num=request.target_num
+    )
+
+    if result and "Error" not in result:
+        return {"status": "success", "content": result}
+    else:
+        return {"status": "error", "msg": result or "生成失败"}
+
+
+@app.post("/api/ai/plan-image-prompts")
+async def plan_image_prompts(
+    request: PlanImagePromptsRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    生图提示词规划 - 使用管理后台配置的系统提示词
+
+    根据产品信息规划多屏详情页的生图提示词
+    """
+    # 获取 ModelScope API Key
+    modelscope_key = crud.get_random_api_key(db, "modelscope")
+    if not modelscope_key:
+        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+
+    # 获取提示词模板
+    prompt_template = crud.get_config(db, "image_generation_prompt", "")
+    if not prompt_template:
+        raise HTTPException(status_code=400, detail="未配置生图提示词规划模板")
+
+    # 调用 AI 服务
+    ai = AIService(modelscope_api_key=modelscope_key)
+    prompts = ai.plan_image_prompts(
+        prompt_template=prompt_template,
+        images=request.images,
+        product_type=request.product_type,
+        selling_points=request.selling_points,
+        design_style=request.design_style,
+        target_lang=request.target_lang,
+        num_screens=request.num_screens
+    )
+
+    if prompts:
+        return {"status": "success", "prompts": prompts}
+    else:
+        return {"status": "error", "msg": "规划失败"}
+
+
+@app.post("/api/ai/video-script")
+async def generate_video_script(
+    request: VideoScriptRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    视频分镜生成 - 使用管理后台配置的系统提示词
+
+    根据产品信息生成视频分镜脚本
+    """
+    # 获取 ModelScope API Key
+    modelscope_key = crud.get_random_api_key(db, "modelscope")
+    if not modelscope_key:
+        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+
+    # 获取提示词模板
+    prompt_template = crud.get_config(db, "video_script_prompt", "")
+    if not prompt_template:
+        raise HTTPException(status_code=400, detail="未配置视频分镜提示词模板")
+
+    # 调用 AI 服务
+    ai = AIService(modelscope_api_key=modelscope_key)
+    script = ai.generate_video_script(
+        prompt_template=prompt_template,
+        images=request.images,
+        product_type=request.product_type,
+        selling_points=request.selling_points,
+        region=request.region,
+        target_lang=request.target_lang,
+        category=request.category,
+        style=request.style,
+        has_subtitle=request.has_subtitle
+    )
+
+    if script and "Error" not in script:
+        return {"status": "success", "script": script}
+    else:
+        return {"status": "error", "msg": script or "生成失败"}
+
+
+@app.post("/api/ai/translate")
+async def translate_text(
+    request: TranslateRequest,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    翻译文本
+    """
+    # 获取 ModelScope API Key
+    modelscope_key = crud.get_random_api_key(db, "modelscope")
+    if not modelscope_key:
+        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+
+    # 调用 AI 服务
+    ai = AIService(modelscope_api_key=modelscope_key)
+    result = ai.translate_text(
+        text=request.text,
+        target_lang=request.target_lang,
+        prompt_key=modelscope_key
+    )
+
+    if result and "Error" not in result and "失败" not in result:
+        return {"status": "success", "content": result}
+    else:
+        return {"status": "error", "msg": result or "翻译失败"}
 
 
 # ============ 启动入口 ============
