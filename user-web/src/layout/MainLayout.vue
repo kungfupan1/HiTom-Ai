@@ -126,7 +126,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { Document, Loading, MagicStick, Shop, Cpu } from '@element-plus/icons-vue'
@@ -139,6 +139,47 @@ const isCollapse = ref(false)
 const showLogs = ref(true)
 const logs = ref([])
 const logContainer = ref(null)
+
+// 用于追踪是否是自动收起（用户手动收起时不应该自动展开）
+const autoCollapsedLog = ref(false)
+const autoCollapsedSidebar = ref(false)
+
+// 响应式断点
+const LOG_COLLAPSE_WIDTH = 1100  // 收起日志栏
+const SIDEBAR_COLLAPSE_WIDTH = 800  // 收起侧边栏
+const MIN_WIDTH = 600  // 最小宽度
+
+const handleResize = () => {
+  const width = window.innerWidth
+
+  // 自动收起/展开日志栏
+  if (width < LOG_COLLAPSE_WIDTH && !autoCollapsedLog.value && showLogs.value) {
+    showLogs.value = false
+    autoCollapsedLog.value = true
+  } else if (width >= LOG_COLLAPSE_WIDTH && autoCollapsedLog.value) {
+    showLogs.value = true
+    autoCollapsedLog.value = false
+  }
+
+  // 自动收起/展开侧边栏
+  if (width < SIDEBAR_COLLAPSE_WIDTH && !autoCollapsedSidebar.value && !isCollapse.value) {
+    isCollapse.value = true
+    autoCollapsedSidebar.value = true
+  } else if (width >= SIDEBAR_COLLAPSE_WIDTH && autoCollapsedSidebar.value) {
+    isCollapse.value = false
+    autoCollapsedSidebar.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+  // 初始检查
+  handleResize()
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 const activeMenu = computed(() => route.path)
 const pageTitle = computed(() => route.meta?.title || 'HiTom-AI')
@@ -166,6 +207,12 @@ const handleCommand = (command) => {
 
 <style scoped>
 /* ================= 全局暗黑背景 ================= */
+.main-layout {
+  min-width: 600px;
+  max-width: 1920px;
+  margin: 0 auto;
+}
+
 .layout-container {
   height: 100vh;
   display: flex;
@@ -432,8 +479,21 @@ const handleCommand = (command) => {
 .slide-fade-enter-from, .slide-fade-leave-to { transform: translateX(20px); opacity: 0; }
 
 /* 响应式 */
-@media screen and (max-width: 768px) {
-  .showLogs { display: none !important; }
+@media screen and (max-width: 1100px) {
+  /* 自动收起日志栏 */
+  .right-log-aside {
+    display: none !important;
+  }
+}
+
+@media screen and (max-width: 800px) {
+  /* 自动收起侧边栏 */
+  .sidebar {
+    width: 64px !important;
+  }
+  .collapse-btn {
+    display: none;
+  }
 }
 </style>
 
