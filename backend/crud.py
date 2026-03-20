@@ -263,33 +263,44 @@ def get_pricing_rules(db: Session, model_id: int) -> List[ModelPricing]:
 
 
 def calculate_cost(db: Session, model_id: str, duration: int = None, resolution: str = None, ratio: str = None, count: int = 1) -> Dict[str, Any]:
-    """计算费用"""
+    """计算费用 - 优先使用 config_schema.pricing_rules"""
     model = get_model_by_id(db, model_id)
     if not model:
         return {"error": "模型不存在"}
 
+    # 优先使用 config_schema 中的 pricing_rules（新逻辑）
+    if model.config_schema and "pricing_rules" in model.config_schema:
+        pricing_rules = model.config_schema["pricing_rules"]
+        form_data = {
+            "duration": duration,
+            "resolution": resolution,
+            "aspect_ratio": ratio,
+            "count": count
+        }
+        result = pricing_engine.calculate(pricing_rules, form_data)
+        result["model_id"] = model_id
+        result["model_name"] = model.display_name
+        return result
+
+    # 回退到旧的 ModelPricing 表逻辑（向后兼容）
     base_cost = model.base_price
     duration_cost = 0
     resolution_cost = 0
     ratio_cost = 0
 
-    # 获取计费规则
     pricing_rules = get_pricing_rules(db, model.id)
     pricing_map = {}
     for rule in pricing_rules:
         key = f"{rule.pricing_type}_{rule.pricing_key}"
         pricing_map[key] = rule.price
 
-    # 计算时长费用
     if duration and model.billing_mode == "duration":
         duration_cost = pricing_map.get(f"duration_{duration}", 0)
-        base_cost = 0  # 按时长计费时，基础费用为0
+        base_cost = 0
 
-    # 计算分辨率加价
     if resolution:
         resolution_cost = pricing_map.get(f"resolution_{resolution}", 0)
 
-    # 计算比例加价
     if ratio:
         ratio_cost = pricing_map.get(f"ratio_{ratio}", 0)
 

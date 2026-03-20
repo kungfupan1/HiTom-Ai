@@ -30,7 +30,8 @@ class PricingEngine:
 
         if mode == "static":
             return self._calculate_static(pricing_rules, form_data)
-        elif mode == "dynamic":
+        elif mode in ("dynamic", "fixed"):
+            # fixed 和 dynamic 使用相同的计算逻辑
             return self._calculate_dynamic(pricing_rules, form_data)
         elif mode == "tiered":
             return self._calculate_tiered(pricing_rules, form_data)
@@ -49,7 +50,8 @@ class PricingEngine:
             "breakdown": {
                 "base_price": base_price,
                 "count": count,
-                "total": total
+                "total": total,
+                "total_cost": total  # 兼容旧 schema
             },
             "description": f"固定费用 {base_price} 积分/次，共 {count} 次"
         }
@@ -60,7 +62,7 @@ class PricingEngine:
         支持：
         - unit_price: 基础单价
         - multiply_by_field: 按字段值乘算（如 duration）
-        - duration_pricing: 时长阶梯价
+        - duration_pricing: 时长加价（叠加到基础价格上）
         - resolution_pricing: 分辨率加价
         - ratio_pricing: 比例加价
         """
@@ -72,14 +74,21 @@ class PricingEngine:
         unit_price = pricing_rules.get("unit_price", 0)
         multiply_field = pricing_rules.get("multiply_by_field")
 
-        # 时长计费
+        # 基础费用（如果有 unit_price）
+        if unit_price > 0:
+            total = unit_price
+            breakdown["base_cost"] = unit_price
+            descriptions.append(f"基础费用: {unit_price} 积分")
+
+        # 时长加价（叠加到基础价格上）
         duration_pricing = pricing_rules.get("duration_pricing", {})
         if duration_pricing and "duration" in form_data:
             duration = int(form_data.get("duration", 0))
-            duration_cost = duration_pricing.get(str(duration), unit_price * duration)
-            breakdown["duration_cost"] = duration_cost
-            total += duration_cost
-            descriptions.append(f"时长 {duration}秒: {duration_cost} 积分")
+            duration_cost = duration_pricing.get(str(duration), 0)
+            if duration_cost > 0:
+                breakdown["duration_cost"] = duration_cost
+                total += duration_cost
+                descriptions.append(f"时长 {duration}秒: +{duration_cost} 积分")
 
         # 分辨率加价
         resolution_pricing = pricing_rules.get("resolution_pricing", {})
@@ -101,20 +110,15 @@ class PricingEngine:
                 total += ratio_cost
                 descriptions.append(f"比例 {ratio}: +{ratio_cost} 积分")
 
-        # 按字段乘算（如果没有时长阶梯价）
-        if multiply_field and multiply_field in form_data and not duration_pricing:
+        # 按字段乘算（如果没有时长阶梯价且没有基础单价）
+        if multiply_field and multiply_field in form_data and not duration_pricing and unit_price == 0:
             multiply_value = int(form_data.get(multiply_field, 1))
-            total = unit_price * multiply_value
+            total = pricing_rules.get("base_price", 10) * multiply_value
             breakdown["multiply_cost"] = total
-            descriptions.insert(0, f"{multiply_field}={multiply_value}, 单价={unit_price}")
-
-        # 如果没有任何计费规则，使用基础单价
-        if total == 0 and unit_price > 0:
-            total = unit_price
-            breakdown["base_cost"] = unit_price
-            descriptions.append(f"基础费用: {unit_price} 积分")
+            descriptions.insert(0, f"{multiply_field}={multiply_value}")
 
         breakdown["total"] = total
+        breakdown["total_cost"] = total  # 兼容旧 schema
 
         return {
             "cost": total,
@@ -160,6 +164,7 @@ class PricingEngine:
                     break
 
         breakdown["total"] = total
+        breakdown["total_cost"] = total  # 兼容旧 schema
 
         return {
             "cost": total,

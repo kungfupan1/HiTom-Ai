@@ -134,11 +134,12 @@ class CalculateCostRequest(BaseModel):
 
 
 class CostBreakdown(BaseModel):
-    base_cost: int
+    base_cost: int = 0
     duration_cost: int = 0
     resolution_cost: int = 0
     ratio_cost: int = 0
-    total_cost: int
+    total_cost: Optional[int] = None
+    total: Optional[int] = None  # 新增，兼容 pricing_engine
 
 
 class CalculateCostResponse(BaseModel):
