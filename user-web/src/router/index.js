@@ -74,6 +74,25 @@ const routes = [
         name: 'ServiceOther',
         component: () => import('@/views/service/ComingSoon.vue'),
         meta: { title: '其他合作' }
+      },
+      // 云端养虾
+      {
+        path: 'shrimp/openclaw',
+        name: 'ShrimpOpenClaw',
+        component: () => import('@/views/service/ComingSoon.vue'),
+        meta: { title: 'OpenClaw部署' }
+      },
+      {
+        path: 'shrimp/skills',
+        name: 'ShrimpSkills',
+        component: () => import('@/views/service/ComingSoon.vue'),
+        meta: { title: 'Skills市场' }
+      },
+      {
+        path: 'shrimp/ai-staff',
+        name: 'ShrimpAIStaff',
+        component: () => import('@/views/service/ComingSoon.vue'),
+        meta: { title: 'AI员工打造' }
       }
     ]
   }
