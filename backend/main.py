@@ -662,18 +662,18 @@ async def generate_selling_points(
 
     根据产品图片生成多组卖点文案
     """
-    # 获取 ModelScope API Key
-    modelscope_key = crud.get_random_api_key(db, "modelscope")
-    if not modelscope_key:
-        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+    # 获取腾讯云函数 URL
+    tencent_function_url = crud.get_config(db, "tencent_function_url", "")
+    if not tencent_function_url:
+        raise HTTPException(status_code=400, detail="未配置腾讯云函数 URL")
 
     # 获取提示词模板
     prompt_template = crud.get_config(db, "image_selling_points_prompt", "")
     if not prompt_template:
         raise HTTPException(status_code=400, detail="未配置看图写卖点提示词")
 
-    # 调用 AI 服务
-    ai = AIService(modelscope_api_key=modelscope_key)
+    # 调用 AI 服务（通过云函数代理）
+    ai = AIService(tencent_function_url=tencent_function_url)
     result = ai.generate_selling_points(
         prompt_template=prompt_template,
         images=request.images,
@@ -700,18 +700,18 @@ async def plan_image_prompts(
 
     根据产品信息规划多屏详情页的生图提示词
     """
-    # 获取 ModelScope API Key
-    modelscope_key = crud.get_random_api_key(db, "modelscope")
-    if not modelscope_key:
-        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+    # 获取腾讯云函数 URL
+    tencent_function_url = crud.get_config(db, "tencent_function_url", "")
+    if not tencent_function_url:
+        raise HTTPException(status_code=400, detail="未配置腾讯云函数 URL")
 
     # 获取提示词模板
     prompt_template = crud.get_config(db, "image_generation_prompt", "")
     if not prompt_template:
         raise HTTPException(status_code=400, detail="未配置生图提示词规划模板")
 
-    # 调用 AI 服务
-    ai = AIService(modelscope_api_key=modelscope_key)
+    # 调用 AI 服务（通过云函数代理）
+    ai = AIService(tencent_function_url=tencent_function_url)
     prompts = ai.plan_image_prompts(
         prompt_template=prompt_template,
         images=request.images,
@@ -739,18 +739,18 @@ async def generate_video_script(
 
     根据产品信息生成视频分镜脚本
     """
-    # 获取 ModelScope API Key
-    modelscope_key = crud.get_random_api_key(db, "modelscope")
-    if not modelscope_key:
-        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+    # 获取腾讯云函数 URL
+    tencent_function_url = crud.get_config(db, "tencent_function_url", "")
+    if not tencent_function_url:
+        raise HTTPException(status_code=400, detail="未配置腾讯云函数 URL")
 
     # 获取提示词模板
     prompt_template = crud.get_config(db, "video_script_prompt", "")
     if not prompt_template:
         raise HTTPException(status_code=400, detail="未配置视频分镜提示词模板")
 
-    # 调用 AI 服务
-    ai = AIService(modelscope_api_key=modelscope_key)
+    # 调用 AI 服务（通过云函数代理）
+    ai = AIService(tencent_function_url=tencent_function_url)
     script = ai.generate_video_script(
         prompt_template=prompt_template,
         images=request.images,
@@ -778,17 +778,16 @@ async def translate_text(
     """
     翻译文本
     """
-    # 获取 ModelScope API Key
-    modelscope_key = crud.get_random_api_key(db, "modelscope")
-    if not modelscope_key:
-        raise HTTPException(status_code=400, detail="未配置 ModelScope API Key")
+    # 获取腾讯云函数 URL
+    tencent_function_url = crud.get_config(db, "tencent_function_url", "")
+    if not tencent_function_url:
+        raise HTTPException(status_code=400, detail="未配置腾讯云函数 URL")
 
-    # 调用 AI 服务
-    ai = AIService(modelscope_api_key=modelscope_key)
+    # 调用 AI 服务（通过云函数代理）
+    ai = AIService(tencent_function_url=tencent_function_url)
     result = ai.translate_text(
         text=request.text,
-        target_lang=request.target_lang,
-        prompt_key=modelscope_key
+        target_lang=request.target_lang
     )
 
     if result and "Error" not in result and "失败" not in result:

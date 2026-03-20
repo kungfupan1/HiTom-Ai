@@ -1,15 +1,15 @@
 """
 AI 服务层 - 处理提示词生成和 API 调用
-参考旧项目 MyWebTool/ai_service.py 实现
+通过腾讯云函数代理调用 ModelScope API
 """
 import requests
 import re
-import base64
+import json
 from typing import Dict, Any, List, Optional
 
 
 class AIService:
-    """AI 提示词生成服务"""
+    """AI 提示词生成服务 - 通过腾讯云函数代理"""
 
     # 语言映射字典
     LANG_MAP = {
@@ -41,10 +41,18 @@ class AIService:
         "马来语 (Malay)": "Malay"
     }
 
-    def __init__(self, modelscope_api_key: str):
-        self.modelscope_api_key = modelscope_api_key
-        self.api_url = "https://api-inference.modelscope.cn/v1/chat/completions"
-        self.model = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+    # ModelScope 配置
+    MODELSCOPE_TARGET_URL = "https://api-inference.modelscope.cn/v1/chat/completions"
+    MODELSCOPE_MODEL = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+
+    def __init__(self, tencent_function_url: str):
+        """
+        初始化 AI 服务
+
+        Args:
+            tencent_function_url: 腾讯云函数 URL
+        """
+        self.tencent_function_url = tencent_function_url
 
     def _get_lang_eng(self, target_lang: str) -> str:
         """将中文语言名转换为英文"""
@@ -62,13 +70,18 @@ class AIService:
             return f"data:image/jpeg;base64,{image_data}"
         return None
 
-    def _call_modelscope_api(self, prompt: str, images: List[str] = None, max_tokens: int = 1500) -> str:
-        """调用 ModelScope API"""
-        headers = {
-            'Authorization': f'Bearer {self.modelscope_api_key}',
-            'Content-Type': 'application/json'
-        }
+    def _call_modelscope_via_proxy(self, prompt: str, images: List[str] = None, max_tokens: int = 1500) -> str:
+        """
+        通过腾讯云函数调用 ModelScope API
 
+        Args:
+            prompt: 提示词
+            images: 图片 base64 列表
+            max_tokens: 最大 token 数
+
+        Returns:
+            AI 生成的文本
+        """
         # 构建消息内容
         content_list = [{"type": "text", "text": prompt}]
 
@@ -82,18 +95,33 @@ class AIService:
                         "image_url": {"url": b64}
                     })
 
-        payload = {
-            "model": self.model,
+        # 构建请求体 - 发送给云函数
+        request_body = {
+            "target_url": self.MODELSCOPE_TARGET_URL,
+            "model": self.MODELSCOPE_MODEL,
             "messages": [{"role": "user", "content": content_list}],
             "max_tokens": max_tokens,
             "temperature": 0.7
         }
 
         try:
-            resp = requests.post(self.api_url, headers=headers, json=payload, timeout=120, verify=False)
+            # 向云函数发请求，使用占位符 API Key
+            resp = requests.post(
+                self.tencent_function_url,
+                headers={
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer MODELSCOPE_API_KEY'  # 占位符，云函数会替换
+                },
+                json=request_body,
+                timeout=120
+            )
+
             if resp.status_code == 200:
-                content = resp.json()['choices'][0]['message']['content'].strip()
-                return content.replace("**", "").replace("##", "")
+                data = resp.json()
+                content = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
+                # 清理 markdown 格式
+                content = content.replace("**", "").replace("##", "")
+                return content
             return f"API Error: {resp.status_code} - {resp.text}"
         except Exception as e:
             return f"Network Error: {str(e)}"
@@ -111,17 +139,6 @@ class AIService:
     ) -> str:
         """
         看图写卖点 - 根据提示词模板生成卖点文案
-
-        Args:
-            prompt_template: 从数据库读取的提示词模板
-            images: 图片 base64 列表
-            product_type: 产品类型
-            design_style: 设计风格
-            target_lang: 目标语言
-            target_num: 生成数量
-
-        Returns:
-            生成的卖点文案
         """
         lang_eng = self._get_lang_eng(target_lang)
 
@@ -139,7 +156,7 @@ class AIService:
         prompt = prompt.replace("{target_num}", str(target_num))
         prompt = prompt.replace("{format_example}", format_example)
 
-        return self._call_modelscope_api(prompt, images, max_tokens=2000)
+        return self._call_modelscope_via_proxy(prompt, images, max_tokens=2000)
 
     # ==================== 2. 生图提示词规划 ====================
 
@@ -155,18 +172,6 @@ class AIService:
     ) -> List[str]:
         """
         生图提示词规划 - 根据提示词模板规划多屏详情页的生图提示词
-
-        Args:
-            prompt_template: 从数据库读取的提示词模板
-            images: 参考图片 base64 列表
-            product_type: 产品类型
-            selling_points: 核心卖点
-            design_style: 设计风格
-            target_lang: 目标语言
-            num_screens: 屏幕数量
-
-        Returns:
-            生图提示词列表
         """
         lang_eng = self._get_lang_eng(target_lang)
 
@@ -178,7 +183,7 @@ class AIService:
         prompt = prompt.replace("{selling_points}", selling_points or "")
         prompt = prompt.replace("{design_style}", design_style or "简约风格")
 
-        result = self._call_modelscope_api(prompt, images, max_tokens=4000)
+        result = self._call_modelscope_via_proxy(prompt, images, max_tokens=4000)
 
         # 解析结果为列表
         return self._parse_prompts(result, num_screens, product_type, design_style)
@@ -187,7 +192,6 @@ class AIService:
         """解析 AI 返回的提示词为列表"""
         try:
             # 尝试 JSON 解析
-            import json
             clean_content = content.replace('```json', '').replace('```', '').strip()
             try:
                 prompts = json.loads(clean_content)
@@ -226,20 +230,6 @@ class AIService:
     ) -> str:
         """
         视频分镜生成 - 根据提示词模板生成视频分镜脚本
-
-        Args:
-            prompt_template: 从数据库读取的提示词模板
-            images: 参考图片
-            product_type: 产品名称
-            selling_points: 核心卖点
-            region: 投放地区
-            target_lang: 目标语言
-            category: 产品类目
-            style: 视频风格
-            has_subtitle: 是否需要字幕
-
-        Returns:
-            视频分镜脚本
         """
         lang_eng = self._get_lang_eng(target_lang)
 
@@ -276,7 +266,7 @@ Write a video script in English description but {lang_eng} dialogue/text.
         # 合并为完整提示词
         full_prompt = f"{script}\n\n{user_req}"
 
-        return self._call_modelscope_api(full_prompt, images[:1] if images else None, max_tokens=1500)
+        return self._call_modelscope_via_proxy(full_prompt, images[:1] if images else None, max_tokens=1500)
 
     def _get_region_prompt(self, region: str) -> str:
         """根据地区生成场景描述"""
@@ -305,8 +295,10 @@ Write a video script in English description but {lang_eng} dialogue/text.
 
     # ==================== 4. 翻译功能 ====================
 
-    def translate_text(self, text: str, target_lang: str, prompt_key: str) -> str:
-        """翻译文本"""
+    def translate_text(self, text: str, target_lang: str) -> str:
+        """
+        翻译文本 - 通过腾讯云函数代理
+        """
         lang_eng = self._get_lang_eng(target_lang)
 
         prompt = f"""
@@ -318,20 +310,4 @@ Rule: Output ONLY the translated text. No explanations.
 {text}
 """
 
-        headers = {
-            'Authorization': f'Bearer {prompt_key}',
-            'Content-Type': 'application/json'
-        }
-
-        payload = {
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}]
-        }
-
-        try:
-            resp = requests.post(self.api_url, headers=headers, json=payload, timeout=60, verify=False)
-            if resp.status_code == 200:
-                return resp.json()['choices'][0]['message']['content'].strip()
-            return "翻译失败"
-        except:
-            return "网络错误"
+        return self._call_modelscope_via_proxy(prompt, images=None, max_tokens=2000)
