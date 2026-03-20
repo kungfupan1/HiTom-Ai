@@ -10,22 +10,21 @@ export default defineConfig({
     }
   },
   server: {
-    port: 8081,
+    port: 8080,
     proxy: {
       '/api': {
-        target: 'http://localhost:8003',
+        // 👇 重点：将 localhost 改为 127.0.0.1，端口必须是 8000
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       },
       '/auth': {
-        target: 'http://localhost:8003',
-        changeOrigin: true
-      },
-      '/admin': {
-        target: 'http://localhost:8003',
+        // 👇 这里也要改
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       },
       '/users': {
-        target: 'http://localhost:8003',
+        // 👇 还有这里
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true
       }
     }

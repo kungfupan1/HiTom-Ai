@@ -58,6 +58,7 @@ async function callAI(placeholder, targetUrl, body, options = {}) {
   // 构建请求体：包含 target_url 和业务数据
   const payload = {
     target_url: targetUrl,
+    target_method: options.method || 'POST', // 👈 动态获取请求方法
     ...body
   }
 
@@ -186,9 +187,24 @@ export const generateVideo = (data) => {
     payload.private = true
   }
 
-  // 时长处理
-  const dur = duration || 10
-  payload.duration = (model === 'grok-video-3') ? parseInt(dur, 10) : String(dur)
+  // 🚨 修复 1：智能时长映射 (Sora 强校验 4, 8, 12)
+  const dur = parseInt(duration || 10, 10)
+  if (model === 'grok-video-3') {
+    // grok 接受数字
+    payload.duration = dur
+  } else if (model.includes('sora')) {
+    // sora 只能接受指定的字符串秒数，我们做个向下兼容映射
+    if (dur <= 5) {
+      payload.duration = '4'
+    } else if (dur <= 10) {
+      payload.duration = '8'
+    } else {
+      payload.duration = '12'
+    }
+  } else {
+    // 其他模型默认传字符串
+    payload.duration = String(dur)
+  }
 
   // 分辨率处理
   payload.hd = (resolution === '1080P')
@@ -198,11 +214,12 @@ export const generateVideo = (data) => {
     payload.images = [images[0]]
   }
 
+  // 🚨 修复 2：将超时时间从 60 秒延长到 3 分钟 (180000ms)，给 Grok 充足的缓冲时间
   return callAI(
     AI_ENDPOINTS.GENERATE_VIDEO.placeholder,
     AI_ENDPOINTS.GENERATE_VIDEO.url,
     payload,
-    { timeout: 60000 }
+    { timeout: 180000 }
   )
 }
 
@@ -219,7 +236,7 @@ export const getVideoStatus = (taskId, model) => {
     AI_ENDPOINTS.VIDEO_STATUS.placeholder,
     targetUrl,
     {},  // GET 请求没有 body
-    { timeout: 30000 }
+    { timeout: 30000, method: 'GET' } // 👈 明确使用 GET
   )
 }
 

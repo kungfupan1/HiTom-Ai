@@ -1,4 +1,7 @@
 'use strict';
+// 【仅在此处新增】：引入 Node.js 16 支持的原生网络模块
+const https = require('https');
+const http = require('http');
 
 /**
  * Hi-Tom-AI 腾讯云函数 - API Key 替换代理
@@ -6,17 +9,18 @@
  * 功能：前端发送带占位符的请求，云函数替换为真实 API Key 后转发到 AI 服务商
  *
  * 占位符：
- *   - MODELSCOPE_API_KEY → 替换为 ModelScope Key
- *   - T8STAR_API_KEY → 替换为 T8Star Key
+ * - MODELSCOPE_API_KEY → 替换为 ModelScope Key
+ * - T8STAR_API_KEY → 替换为 T8Star Key
  *
  * 请求格式：
- *   Headers: { Authorization: "Bearer T8STAR_API_KEY" }  ← 占位符
- *   Body: {
- *     target_url: "https://ai.t8star.cn/v2/videos/generations",  ← 真实 API 地址
- *     model: "sora-2",
- *     prompt: "...",
- *     ...
- *   }
+ * Headers: { Authorization: "Bearer T8STAR_API_KEY" }  ← 占位符
+ * Body: {
+ * target_url: "https://ai.t8star.cn/v2/videos/generations",  ← 真实 API 地址
+ * target_method: "GET", ← 动态指定的请求方式（新增）
+ * model: "sora-2",
+ * prompt: "...",
+ * ...
+ * }
  */
 
 // ==========================================
@@ -29,7 +33,7 @@ const KEY_POOL = {
   ],
   t8star: [
     // TODO: 填入你的 T8Star API Keys
-    "sk-t8star-key-01"
+    "sk-S0SFzFBigiwFqP2NGAVvOtJWkb7VO8VYJTp4WfcBSCvUMsA1"
   ]
 };
 
@@ -131,7 +135,7 @@ exports.main_handler = async (event, context) => {
 
     let targetUrl = '';
     let finalBody = rawBody;
-    let httpMethod = event.httpMethod || 'POST';
+    let targetMethod = 'POST'; // 【修改点1】：默认改为 POST，后面会从 body 中动态覆盖
 
     // 解析请求体
     let bodyObj = {};
@@ -144,16 +148,24 @@ exports.main_handler = async (event, context) => {
       }
     }
 
-    // 从请求体提取 target_url
+    // 从请求体提取 target_url 和 target_method
     if (bodyObj.target_url) {
       targetUrl = bodyObj.target_url;
-      delete bodyObj.target_url;  // 不转发给 AI 商
+      targetMethod = (bodyObj.target_method || 'POST').toUpperCase(); // 【修改点2】：动态提取前端传来的真实请求方式
+
+      delete bodyObj.target_url;     // 不转发给 AI 商
+      delete bodyObj.target_method;  // 【修改点3】：把 target_method 也删掉，不转发给 AI 商
 
       // 替换 body 中的占位符（如果有）
-      const bodyStr = JSON.stringify(bodyObj);
-      finalBody = replacePlaceholder(bodyStr, placeholder, realKey);
+      // 【修改点4】：如果剔除路由参数后是空对象，直接给空字符串，防止 GET 请求带上 '{}' 导致报错
+      if (Object.keys(bodyObj).length > 0) {
+        const bodyStr = JSON.stringify(bodyObj);
+        finalBody = replacePlaceholder(bodyStr, placeholder, realKey);
+      } else {
+        finalBody = '';
+      }
 
-      console.log(`[云函数] 目标 URL: ${targetUrl}`);
+      console.log(`[云函数] 目标 URL: ${targetUrl}, 目标 Method: ${targetMethod}`);
     }
 
     // 如果没有 target_url，返回错误
@@ -174,34 +186,52 @@ exports.main_handler = async (event, context) => {
     // ==========================================
 
     const fetchOptions = {
-      method: httpMethod,
+      method: targetMethod, // 【修改点5】：使用动态提取的 targetMethod
       headers: finalHeaders
     };
 
-    // GET 请求不需要 body
-    if (httpMethod !== 'GET' && finalBody) {
+    // GET 请求不需要 body，严禁携带 body
+    if (targetMethod !== 'GET' && finalBody) { // 【修改点6】：使用 targetMethod 进行判断
       fetchOptions.body = finalBody;
     }
 
-    console.log(`[云函数] 转发请求: ${httpMethod} ${targetUrl}`);
+    console.log(`[云函数] 转发请求: ${targetMethod} ${targetUrl}`);
 
     // ==========================================
-    // 8. 发起真实请求
+    // 8. 发起真实请求 【仅修改了这一块：替换为兼容 Node 16 的原生写法】
     // ==========================================
+    const responseResult = await new Promise((resolve, reject) => {
+      const parsedUrl = new URL(targetUrl);
+      const client = parsedUrl.protocol === 'https:' ? https : http;
 
-    const response = await fetch(targetUrl, fetchOptions);
-    const responseText = await response.text();
+      const req = client.request(targetUrl, {
+        method: fetchOptions.method,
+        headers: fetchOptions.headers,
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => resolve({ status: res.statusCode, data: data }));
+      });
 
-    console.log(`[云函数] 收到响应: ${response.status}`);
+      req.on('error', (e) => reject(e));
+
+      // 写入请求体
+      if (fetchOptions.body) {
+        req.write(fetchOptions.body);
+      }
+      req.end();
+    });
+
+    console.log(`[云函数] 收到响应: ${responseResult.status}`);
 
     // ==========================================
-    // 9. 返回结果
+    // 9. 返回结果 【适配了第8步的返回变量】
     // ==========================================
 
     return {
-      statusCode: response.status,
+      statusCode: responseResult.status,
       headers: corsHeaders,
-      body: responseText
+      body: responseResult.data
     };
 
   } catch (error) {

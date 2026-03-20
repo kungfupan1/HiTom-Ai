@@ -371,31 +371,72 @@ const analyzeImages = async () => {
   emit('log', '开始分析图片...')
 
   try {
+// ==========================================
+    // 1. 动态获取后台配置的腾讯云函数地址
+    // ==========================================
+    emit('log', `正在获取系统配置...`)
+    // 调用封装好的 axios 实例去后端拿配置
+    const configRes = await request.get('/api/config/pricing-info')
+    const CLOUD_FUNCTION_URL = configRes.tencent_function_url || ''
+
+    if (!CLOUD_FUNCTION_URL) {
+      throw new Error('腾讯云函数 URL 未配置，请在管理后台的【系统配置】中设置！')
+    }
+
+    emit('log', `准备发送至云函数网关...`)
     emit('log', `上传图片数: ${imageBase64List.value.length}`)
-    emit('log', '正在调用 AI 分析图片...')
 
-    // 调用新的 API（使用占位符模式）
-    const res = await analyzeImagesAPI({
-      images: imageBase64List.value,
-      product_type: form.product_type || '产品',
-      design_style: form.style || '现代简约',
-      target_lang: form.language.split(' (')[0] || '中文',
-      target_num: 1
-    })
+    // ... 下面的构造 requestBody 和 fetch 逻辑保持不变 ...
 
+    // 2. 构造通用大模型视觉接口的请求体 (这里以 ModelScope 的 qwen-vl-plus 为例)
+    const userPrompt = `产品名称：${form.product_type || '未知产品'}。请根据图片提取产品的核心卖点，要求视频风格：${form.style}，目标受众语言：${form.language.split(' (')[0]}。直接返回商品卖点文案即可，不要多余废话。`
+
+    const contentArray = [
+      { type: "text", text: userPrompt }
+    ];
+
+    imageBase64List.value.forEach(base64 => {
+       contentArray.push({ type: "image_url", image_url: { url: base64 } })
+    });
+
+    const requestBody = {
+      target_url: 'https://api-inference.modelscope.cn/v1/chat/completions',
+      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      messages: [{ role: "user", content: contentArray }]
+    };
+
+    // 3. 使用原生 fetch 发送请求（完美绕过本地 token 拦截器）
+    emit('log', '正在调用 AI 分析图片 (通过云函数)...')
+
+    const response = await fetch(CLOUD_FUNCTION_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // 【核心魔法】直接塞入占位符！
+        'Authorization': `Bearer MODELSCOPE_API_KEY`
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      throw new Error(`云函数请求失败，状态码: ${response.status}`);
+    }
+
+    const data = await response.json();
     emit('log', `API 返回状态: success`)
 
-    // 提取内容
-    let content = res.choices?.[0]?.message?.content || res.content || ''
+    // 4. 解析云函数原封不动返回的大模型结果
+    const content = data.choices?.[0]?.message?.content || "";
+
     if (content) {
-      content = content.replace(/\*\*/g, '').replace(/##/g, '')
       form.selling_points = content
       ElMessage.success('文案生成成功！')
       emit('log', '文案生成成功！')
     } else {
-      ElMessage.error('生成失败，请重试')
-      emit('log', `生成失败: ${JSON.stringify(res)}`)
+      ElMessage.error('未能解析出文案，请重试')
+      emit('log', `生成失败，大模型返回原始数据: ${JSON.stringify(data)}`)
     }
+
   } catch (e) {
     console.error('分析失败', e)
     emit('log', `分析失败: ${e.message || '未知错误'}`)
@@ -404,6 +445,10 @@ const analyzeImages = async () => {
     analyzing.value = false
   }
 }
+
+
+// 👇 新增：在组件顶部（或方法外侧）声明一个变量，用于在不同方法间共享扣费ID，以便异步退款
+const currentDeductionId = ref(null)
 
 // 提交任务
 const submitTask = async () => {
@@ -416,7 +461,6 @@ const submitTask = async () => {
     return ElMessage.warning('积分不足，请充值')
   }
 
-  // 确认弹窗
   try {
     await ElMessageBox.confirm(
       `即将消耗 ${costInfo.value.cost} 积分生成视频，确认继续？`,
@@ -431,24 +475,21 @@ const submitTask = async () => {
   taskStatus.value = 'processing'
   progress.value = 5
   videoUrl.value = ''
-  let deductionId = null
+  currentDeductionId.value = null // 每次提交前重置
 
   emit('log', '开始视频生成任务...')
 
   try {
-    // 1. 预扣积分
     emit('log', '步骤1: 预扣积分...')
     const reserveRes = await request.post('/api/points/reserve', {
       amount: costInfo.value.cost,
       model_id: form.model
     })
-    deductionId = reserveRes.deduction_id
-    emit('log', `预扣成功，deduction_id: ${deductionId}`)
+    currentDeductionId.value = reserveRes.deduction_id // 保存扣费ID供全局使用
+    emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
 
-    // 2. 构建提示词
     const prompt = `产品: ${form.product_type}\n卖点: ${form.selling_points}\n风格: ${form.style}\n类目: ${form.category}\n语言: ${form.language}\n地区: ${form.region}`
 
-    // 3. 调用视频生成 API（使用占位符模式）
     emit('log', `步骤2: 调用 ${form.model} 生成视频...`)
     const videoRes = await generateVideo({
       model: form.model,
@@ -459,29 +500,28 @@ const submitTask = async () => {
       images: imageBase64List.value
     })
 
-    taskId.value = videoRes.task_id
+    const actualTaskId = videoRes?.data?.task_id || videoRes?.task_id
+    if (!actualTaskId) throw new Error('未获取到任务ID')
+
+    taskId.value = actualTaskId
     emit('log', `任务已提交，task_id: ${taskId.value}`)
 
-    // 4. 确认扣费
-    await request.post('/api/points/confirm', { deduction_id: deductionId })
+    await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
     emit('log', '积分扣费已确认')
 
-    // 5. 刷新积分
     userStore.refreshPoints()
     emit('refresh-points')
 
-    // 6. 开始轮询状态
     emit('log', '开始轮询生成状态...')
     startStatusPolling()
 
     ElMessage.success('视频生成任务已提交')
   } catch (e) {
-    // 退还积分
-    if (deductionId) {
+    if (currentDeductionId.value) {
       try {
         await request.post('/api/points/refund', {
-          deduction_id: deductionId,
-          reason: '生成失败'
+          deduction_id: currentDeductionId.value,
+          reason: '提交任务失败'
         })
         emit('log', '积分已退还')
       } catch (err) {}
@@ -495,34 +535,87 @@ const submitTask = async () => {
 
 // 状态轮询
 let statusTimer = null
+let errorCount = 0
 
 const startStatusPolling = () => {
   stopStatusPolling()
+  errorCount = 0
+
   statusTimer = setInterval(async () => {
     try {
       const res = await getVideoStatus(taskId.value, form.model)
 
-      const status = res.status
-      const prog = res.progress || 0
+      // 🚨 修复核心：不再“自作聪明”地去层叠赋值，而是精准提取每个字段
+      // T8Star 的 status/progress 通常在最外层，但也防一手套娃的情况
+      const apiStatus = res.status || res.data?.status || 'pending'
+      const rawStatus = String(apiStatus).toLowerCase()
+
+      // Grok 的报错信息通常放在 fail_reason 字段
+      const errMsg = res.fail_reason || res.error?.message || res.message || res.data?.error || '未知错误'
+
+      const prog = res.progress || res.data?.progress || 0
       progress.value = Math.min(99, parseInt(prog))
 
-      if (status === 'SUCCESS' || status === 'success') {
+      if (['success', 'completed', 'succeeded'].includes(rawStatus)) {
         clearInterval(statusTimer)
         progress.value = 100
-        videoUrl.value = res.video_url
+        // Grok 的视频链接在 data.output 里，但也兼容其他格式
+        videoUrl.value = res.data?.output || res.video_url || res.data?.video_url || res.url
         taskStatus.value = 'success'
         loading.value = false
         ElMessage.success('视频生成完成！')
-      } else if (status === 'FAILURE' || status === 'failed') {
+      }
+      else if (
+        ['failed', 'error', 'failure', 'rejected', 'canceled'].includes(rawStatus) ||
+        (errMsg !== '未知错误' && (errMsg.includes('受限') || errMsg.includes('失败') || errMsg.includes('error') || errMsg.includes('频率')))
+      ) {
         clearInterval(statusTimer)
         taskStatus.value = 'fail'
         loading.value = false
-        ElMessage.error('生成失败: ' + (res.error || '未知错误'))
+        ElMessage.error('任务生成失败: ' + errMsg)
+        emit('log', `任务被中转商或官方异常中断: ${errMsg}`)
+
+        // 异步任务失败退款机制保持不变
+        if (currentDeductionId.value) {
+          try {
+            await request.post('/api/points/refund', {
+              deduction_id: currentDeductionId.value,
+              reason: '视频生成过程中断: ' + errMsg
+            })
+            userStore.refreshPoints()
+            emit('refresh-points')
+            emit('log', '💰 检测到生成失败，扣除的积分已自动全额退还')
+          } catch (err) {
+            console.error('自动退款请求失败', err)
+          }
+        }
+      } else if (rawStatus === 'undefined' || rawStatus === '') {
+        // 防止由于数据结构巨变导致的永久死循环
+        errorCount++
+      } else {
+        // 正常排队或处理中，清空错误计数
+        errorCount = 0
       }
+
+      // 如果连续 5 次拿不到正常的 JSON 结构（防止再次出现死循环的情况）
+      if (errorCount >= 5) {
+        clearInterval(statusTimer)
+        taskStatus.value = 'fail'
+        loading.value = false
+        ElMessage.error('无法解析任务状态，已自动中止查询')
+      }
+
     } catch (e) {
-      console.error('状态查询失败', e)
+      console.error('状态查询网络异常', e)
+      errorCount++
+      if (errorCount >= 5) {
+        clearInterval(statusTimer)
+        taskStatus.value = 'fail'
+        loading.value = false
+        ElMessage.error('查询状态网络异常，已自动中止查询，请稍后前往历史记录查看。')
+      }
     }
-  }, 5000)
+  }, 15000) // 保持 15 秒轮询频率防封控
 }
 
 const stopStatusPolling = () => {
@@ -531,6 +624,8 @@ const stopStatusPolling = () => {
     statusTimer = null
   }
 }
+
+
 
 onMounted(() => {
   loadModels()

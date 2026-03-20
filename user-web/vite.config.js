@@ -13,15 +13,15 @@ export default defineConfig({
     port: 8080,
     proxy: {
       '/api': {
-        target: 'http://localhost:8003',
+        target: 'http://localhost:8000',
         changeOrigin: true
       },
       '/auth': {
-        target: 'http://localhost:8003',
+        target: 'http://localhost:8000',
         changeOrigin: true
       },
       '/users': {
-        target: 'http://localhost:8003',
+        target: 'http://localhost:8000',
         changeOrigin: true
       }
     }
