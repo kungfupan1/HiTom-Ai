@@ -20,9 +20,9 @@ hi-tom-ai/
 │   ├── crud.py                 # 业务逻辑
 │   ├── schemas.py              # 数据校验
 │   └── init_db.py              # 初始化脚本
-├── vercel-api/                 # Vercel Functions（AI 代理）
-│   ├── api/ai/                 # AI 接口
-│   └── lib/provider-mapper.js  # 参数映射引擎
+├── tencent-function/           # 腾讯云函数（AI 代理）
+│   └── index.js                # API Key 替换代理
+├── tencent-api-web/            # 腾讯云函数部署指南
 ├── user-web/                   # 用户端前端（Vue 3）
 ├── admin-web/                  # 管理端前端（Vue 3）
 ├── CLAUDE.md                   # 开发指南
@@ -35,8 +35,8 @@ hi-tom-ai/
 ```
 用户浏览器
     │
-    ├── AI 请求 ──────────────→ Vercel Functions ──→ AI 服务商
-    │   (生图/生视频)              (存 API Key)        (T8Star等)
+    ├── AI 请求 ──────────────→ 腾讯云函数 ──→ AI 服务商
+    │   (生图/生视频)            (API Key池)    (T8Star/ModelScope)
     │
     └── 业务请求 ──────────────→ 你的服务器
         (登录/积分/日志)            (FastAPI + SQLite)
@@ -63,13 +63,9 @@ cd user-web && npm install && npm run dev
 cd admin-web && npm install && npm run dev
 ```
 
-### 3. Vercel Functions
+### 3. 腾讯云函数
 
-```bash
-cd vercel-api
-npm install
-vercel                          # 部署到 Vercel
-```
+参见 `tencent-api-web/DEPLOYMENT_GUIDE.md` 进行部署。
 
 ## 默认账号
 
@@ -79,10 +75,12 @@ vercel                          # 部署到 Vercel
 ## 环境变量
 
 ```env
-# Vercel 环境变量
-T8STAR_API_KEY=sk-xxx
-MODELSCOPE_API_KEY=sk-xxx
-BACKEND_URL=https://your-server.com
+# 腾讯云函数环境变量（在 tencent-function/index.js 中配置）
+KEY_POOL.modelscope = ["ms-xxx-01", "ms-xxx-02"]
+KEY_POOL.t8star = ["sk-xxx-01", "sk-xxx-02"]
+
+# 后端系统配置（通过管理后台设置）
+tencent_function_url = https://your-scf-url
 ```
 
 ## 文档

@@ -21,6 +21,11 @@ cd user-web && npm install && npm run dev   # port 8080
 cd admin-web && npm install && npm run dev  # port 8081
 ```
 
+## Default Credentials
+
+- Admin: `admin` / `admin123`
+- New user signup bonus: 10 points
+
 ## Architecture
 
 ```
@@ -50,9 +55,13 @@ The cloud function uses a key pool with random selection:
 - `KEY_POOL.t8star`: Array of T8Star API keys
 - Frontend sends requests with placeholder keys (`MODELSCOPE_API_KEY` or `T8STAR_API_KEY`)
 - Cloud function replaces placeholders with real keys from the pool
-- Routes to `api.modelscope.cn` or `api.t8star.com` based on placeholder type
+- Routes to `api.modelscope.cn` or `ai.t8star.cn` based on placeholder type
 
-**Note:** The frontend (`user-web/src/api/index.js`) currently references `VERCEL_URL`. This needs to be updated to point to the Tencent Cloud Function URL once deployed.
+**Request flow:**
+1. Frontend fetches `tencent_function_url` from backend via `GET /api/config/pricing-info`
+2. Frontend sends request to cloud function with `Authorization: Bearer T8STAR_API_KEY` (placeholder)
+3. Cloud function detects placeholder, selects real key from pool, forwards to target AI provider
+4. Cloud function returns response to frontend
 
 ### Points Reserve/Confirm/Refund
 
@@ -97,6 +106,11 @@ KEY_POOL.t8star = ["sk-xxx-01", "sk-xxx-02", ...]
 **Tencent Cloud Functions:**
 - Single proxy endpoint that routes to ModelScope or T8Star based on placeholder key in request
 
+**AI Provider Endpoints (used by frontend):**
+- ModelScope: `https://api-inference.modelscope.cn/v1/chat/completions` (image analysis)
+- T8Star Video: `https://ai.t8star.cn/v2/videos/generations`
+- T8Star Image: `https://ai.t8star.cn/v1/images/generations`
+
 ## Deployment
 
 See `tencent-api-web/DEPLOYMENT_GUIDE.md` for Tencent Cloud Functions deployment instructions.
@@ -109,7 +123,14 @@ All 20 features completed. See `feature_list.json` for details.
 
 - **Backend**: Fully functional (FastAPI + SQLite)
 - **Frontend**: User-web and Admin-web complete
-- **AI Proxy**: Migrating from Vercel to Tencent Cloud Functions
-  - `tencent-function/index.js`: Simple proxy with key pool pattern (created by Gemini)
+- **AI Proxy**: Tencent Cloud Functions deployed
+  - `tencent-function/index.js`: Single proxy with key pool pattern
   - `tencent-api-web/`: Contains deployment guide and detailed function implementations
-  - Frontend still points to old Vercel URL - needs update after Tencent deployment
+  - Frontend dynamically fetches function URL from backend config (`tencent_function_url`)
+
+## Important Files
+
+- `backend/crud.py`: Core business logic (points, models, pricing)
+- `backend/models.py`: SQLAlchemy database models
+- `user-web/src/api/index.js`: Frontend API layer with placeholder key pattern
+- `tencent-function/index.js`: Cloud function proxy implementation
