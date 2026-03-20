@@ -59,7 +59,7 @@
                   </el-col>
                   <el-col :span="8">
                      <el-form-item label=" ">
-                       <el-button type="danger" plain style="width: 100%" class="stop-btn" @click="translateText" :loading="translating">仅翻译</el-button>
+                       <el-button type="danger" plain style="width: 100%" class="stop-btn" @click="translateTextHandler" :loading="translating">仅翻译</el-button>
                      </el-form-item>
                   </el-col>
                 </el-row>
@@ -208,6 +208,7 @@
 <script setup>
 import { reactive, ref, onMounted, watch } from 'vue'
 import request from '../../api/request'
+import { analyzeImages as analyzeImagesAPI, translateText as translateTextAPI, planImagePrompts as planImagePromptsAPI } from '../../api/index'
 import { Plus, ZoomIn, Edit, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { saveAs } from 'file-saver'
@@ -339,52 +340,59 @@ const analyzeImages = async () => {
   const count = form.num_images || 1
   emit('log', `正在分析 ${imageBase64List.value.length} 张图片...`)
   try {
-    // 调用新的 AI 接口，使用管理后台配置的提示词模板
-    const res = await request.post('/api/ai/selling-points', {
+    // 通过腾讯云函数代理调用 ModelScope
+    const res = await analyzeImagesAPI({
       images: imageBase64List.value,
       product_type: pType,
       design_style: form.design_style,
       target_lang: form.target_lang,
       target_num: count
     })
-    if (res.status === 'success') {
-      let cleanContent = res.content
-      if (cleanContent.includes("Set 1:")) {
-        cleanContent = cleanContent.replace(/Set \d+:/g, "").trim()
+
+    // 解析响应
+    let content = res.choices?.[0]?.message?.content || ''
+    if (content) {
+      // 清理格式
+      if (content.includes("Set 1:")) {
+        content = content.replace(/Set \d+:/g, "").trim()
       }
-      form.selling_points = cleanContent
+      form.selling_points = content
       ElMessage.success('卖点生成成功')
     } else {
-      emit('log', `分析失败: ${res.msg}`)
-      ElMessage.error(res.msg)
+      emit('log', `分析失败: 响应格式错误`)
+      ElMessage.error('分析失败')
     }
   } catch (e) {
     ElMessage.error('分析失败')
-    emit('log', `网络请求错误: ${e}`)
+    emit('log', `网络请求错误: ${e.message || e}`)
   } finally {
     analyzing.value = false
   }
 }
 
-const translateText = async () => {
+const translateTextHandler = async () => {
   if (!form.selling_points) return ElMessage.warning('请先输入文案')
   translating.value = true
   emit('log', `正在将文案翻译为：${form.target_lang}...`)
   try {
-    // 调用新的 AI 翻译接口，使用管理后台配置的提示词模板
-    const res = await request.post('/api/ai/translate', {
+    // 通过腾讯云函数代理调用 ModelScope
+    const res = await translateTextAPI({
       text: form.selling_points,
       target_lang: form.target_lang
     })
-    if (res.status === 'success') {
-      form.selling_points = res.content
+
+    // 解析响应
+    const content = res.choices?.[0]?.message?.content || ''
+    if (content) {
+      form.selling_points = content
       ElMessage.success('翻译完成')
       emit('log', `翻译成功`)
     } else {
-      emit('log', `翻译失败: ${res.msg}`)
+      emit('log', `翻译失败: 响应格式错误`)
     }
   } catch (e) {
     ElMessage.error('翻译失败')
+    emit('log', `翻译失败: ${e.message || e}`)
   } finally {
     translating.value = false
   }
@@ -399,8 +407,8 @@ const generateImage = async () => {
   let promptList = []
 
   try {
-    // 调用新的 AI 提示词规划接口，使用管理后台配置的提示词模板
-    const resPlan = await request.post('/api/ai/plan-image-prompts', {
+    // 通过腾讯云函数代理调用 ModelScope 进行提示词规划
+    const res = await planImagePromptsAPI({
       images: imageBase64List.value,
       product_type: form.product_type,
       selling_points: form.selling_points,
@@ -408,16 +416,32 @@ const generateImage = async () => {
       target_lang: form.target_lang,
       num_screens: form.num_images
     })
-    if (resPlan.status === 'success') {
-      promptList = resPlan.prompts
-      emit('log', `方案规划完成`)
-      promptList.forEach((p, index) => emit('log', `[方案 ${index + 1}]: ${p}\n---`))
-    } else {
-      throw new Error(resPlan.msg)
+
+    // 解析响应
+    const content = res.choices?.[0]?.message?.content || ''
+
+    // 尝试解析 JSON 数组
+    try {
+      // 清理可能的 markdown 代码块
+      let cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      promptList = JSON.parse(cleanContent)
+      if (!Array.isArray(promptList)) {
+        promptList = [cleanContent]
+      }
+    } catch {
+      // 如果不是 JSON，按行分割
+      promptList = content.split('\n').filter(line => line.trim().length > 20)
     }
+
+    if (promptList.length === 0) {
+      promptList = [form.selling_points]
+    }
+
+    emit('log', `方案规划完成，共 ${promptList.length} 个方案`)
+    promptList.forEach((p, index) => emit('log', `[方案 ${index + 1}]: ${p.substring(0, 100)}...`))
   } catch (e) {
     ElMessage.error('方案规划失败')
-    emit('log', `规划失败: ${e.message}`)
+    emit('log', `规划失败: ${e.message || e}`)
     loading.value = false
     return
   }

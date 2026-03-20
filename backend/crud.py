@@ -8,7 +8,7 @@ from sqlalchemy import and_
 import uuid
 import json
 
-from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog, APIKey
+from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog
 from engines.pricing_engine import pricing_engine
 
 
@@ -380,87 +380,3 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
         "image_generation_prompt": config_map.get("image_generation_prompt", ""),
         "video_script_prompt": config_map.get("video_script_prompt", "")
     }
-
-
-# ============ API Key 相关 ============
-def get_all_api_keys(db: Session, provider: str = None) -> List[APIKey]:
-    """获取所有 API Key"""
-    query = db.query(APIKey)
-    if provider:
-        query = query.filter(APIKey.provider == provider)
-    return query.order_by(APIKey.provider, APIKey.id).all()
-
-
-def get_api_key_by_id(db: Session, key_id: int) -> Optional[APIKey]:
-    """根据 ID 获取 API Key"""
-    return db.query(APIKey).filter(APIKey.id == key_id).first()
-
-
-def create_api_key(db: Session, key_name: str, key_value: str, provider: str, description: str = None) -> APIKey:
-    """创建 API Key"""
-    api_key = APIKey(
-        key_name=key_name,
-        key_value=key_value,
-        provider=provider,
-        description=description
-    )
-    db.add(api_key)
-    db.commit()
-    db.refresh(api_key)
-    return api_key
-
-
-def update_api_key(db: Session, key_id: int, key_value: str = None, is_enabled: bool = None, description: str = None) -> Optional[APIKey]:
-    """更新 API Key"""
-    api_key = get_api_key_by_id(db, key_id)
-    if not api_key:
-        return None
-
-    if key_value is not None:
-        api_key.key_value = key_value
-    if is_enabled is not None:
-        api_key.is_enabled = is_enabled
-    if description is not None:
-        api_key.description = description
-
-    db.commit()
-    db.refresh(api_key)
-    return api_key
-
-
-def delete_api_key(db: Session, key_id: int) -> bool:
-    """删除 API Key"""
-    api_key = get_api_key_by_id(db, key_id)
-    if not api_key:
-        return False
-
-    db.delete(api_key)
-    db.commit()
-    return True
-
-
-def get_random_api_key(db: Session, provider: str) -> Optional[str]:
-    """随机获取一个可用的 API Key（负载均衡/薅羊毛策略）"""
-    import random
-    keys = db.query(APIKey).filter(
-        APIKey.provider == provider,
-        APIKey.is_enabled == True
-    ).all()
-
-    if not keys:
-        return None
-
-    # 随机选择一个
-    selected = random.choice(keys)
-
-    # 更新使用统计
-    selected.use_count += 1
-    selected.last_used_time = datetime.now()
-    db.commit()
-
-    return selected.key_value
-
-
-def get_api_key_by_name(db: Session, key_name: str) -> Optional[APIKey]:
-    """根据名称获取 API Key"""
-    return db.query(APIKey).filter(APIKey.key_name == key_name).first()

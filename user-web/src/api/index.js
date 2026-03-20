@@ -263,3 +263,95 @@ export const generateImage = (data) => {
     { timeout: 60000 }
   )
 }
+
+/**
+ * 翻译文本
+ * @param {object} data - { text, target_lang }
+ */
+export const translateText = (data) => {
+  const { text, target_lang } = data
+  const targetLang = target_lang || 'Chinese'
+
+  const promptText = `
+[Role] Professional Translator.
+[Task] Translate the following content into **${targetLang}**.
+[Rule] Output ONLY the translated text. No explanations.
+
+[Content]:
+${text}
+`
+
+  return callAI(
+    AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
+    AI_ENDPOINTS.ANALYZE_IMAGES.url,
+    {
+      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      messages: [{ role: 'user', content: promptText }],
+      max_tokens: 2000,
+      temperature: 0.3
+    },
+    { timeout: 60000 }
+  )
+}
+
+/**
+ * 生图提示词规划
+ * @param {object} data - { images, product_type, selling_points, design_style, target_lang, num_screens }
+ */
+export const planImagePrompts = (data) => {
+  const { images, product_type, selling_points, design_style, target_lang, num_screens } = data
+
+  const productType = product_type || '通用产品'
+  const designStyle = design_style || '现代简约'
+  const targetLang = target_lang || 'Chinese'
+  const numScreens = num_screens || 1
+
+  const promptText = `
+[Role] Expert E-commerce Visual Designer.
+[Task] Plan ${numScreens} distinct image generation prompts for a product detail page.
+
+[Product Info]
+- Product: ${productType}
+- Selling Points: ${selling_points}
+- Design Style: ${designStyle}
+- Target Language: ${targetLang}
+
+[Output Format]
+Return a JSON array with ${numScreens} prompt strings. Each prompt should be detailed and suitable for AI image generation.
+Example: ["prompt 1...", "prompt 2...", "prompt 3..."]
+
+[Requirements]
+1. Each prompt should describe a complete scene
+2. Include product placement, lighting, background
+3. Make prompts suitable for e-commerce use
+4. Output ONLY the JSON array, no other text
+`
+
+  // 构建消息内容
+  const content = [{ type: 'text', text: promptText }]
+
+  // 添加图片
+  const validImages = (images || []).filter(img => img).slice(0, 3)
+  for (const imgBase64 of validImages) {
+    let imgUrl = imgBase64
+    if (!imgBase64.startsWith('data:image')) {
+      imgUrl = `data:image/jpeg;base64,${imgBase64}`
+    }
+    content.push({
+      type: 'image_url',
+      image_url: { url: imgUrl }
+    })
+  }
+
+  return callAI(
+    AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
+    AI_ENDPOINTS.ANALYZE_IMAGES.url,
+    {
+      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      messages: [{ role: 'user', content }],
+      max_tokens: 4000,
+      temperature: 0.7
+    },
+    { timeout: 120000 }
+  )
+}

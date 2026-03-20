@@ -168,7 +168,7 @@
 import { Plus, MagicStick } from '@element-plus/icons-vue'
 import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import request from '@/api/request'
-import { generateVideo, getVideoStatus } from '@/api/index'
+import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
@@ -333,8 +333,8 @@ const analyzeImages = async () => {
   emit('log', '开始分析图片...')
 
   try {
-    // 调用新的 AI 接口，使用管理后台配置的提示词模板
-    const res = await request.post('/api/ai/selling-points', {
+    // 通过腾讯云函数代理调用 ModelScope
+    const res = await analyzeImagesAPI({
       images: imageBase64List.value,
       product_type: dynamicFormData.product_type || '通用产品',
       design_style: dynamicFormData.style || '简约风格',
@@ -342,13 +342,15 @@ const analyzeImages = async () => {
       target_num: 1
     })
 
-    if (res.status === 'success') {
-      dynamicFormData.selling_points = res.content
+    // 解析响应
+    const content = res.choices?.[0]?.message?.content || ''
+    if (content) {
+      dynamicFormData.selling_points = content
       ElMessage.success('文案生成成功！')
       emit('log', '文案生成成功！')
     } else {
-      ElMessage.error('分析失败: ' + (res.msg || '未知错误'))
-      emit('log', '分析失败: ' + (res.msg || '未知错误'))
+      ElMessage.error('分析失败: 响应格式错误')
+      emit('log', '分析失败: 响应格式错误')
     }
   } catch (e) {
     console.error('分析失败', e)

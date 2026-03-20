@@ -2,25 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# 项目工作模式
-
-使用长期运行代理模式工作。
-
-## 会话启动时
-
-1. 读取 `claude-progress.txt` 和 `feature_list.json`
-2. 查看 git log
-3. 验证现有功能
-4. 选择下一个任务
-
-## 会话结束时
-
-1. git commit
-2. 更新 `claude-progress.txt`
-3. 更新 `feature_list.json`
-
----
-
 ## Project Overview
 
 Hi-Tom-AI is an AI e-commerce content generation platform that generates images and videos using AI services (T8Star, ModelScope). The architecture separates AI API calls (handled by Tencent Cloud Functions) from business logic (handled by FastAPI backend).
@@ -51,105 +32,101 @@ cd admin-web && npm install && npm run dev  # port 8081
 User Browser
     │
     ├── AI requests ──────────→ Tencent Cloud Functions ──→ AI Provider
-    │   (image/video gen)         (API key pool)              (T8Star/ModelScope)
+    │   (image/video/gen)         (API key pool)              (T8Star/ModelScope)
     │
     └── Business requests ─────→ FastAPI Backend
         (auth, points, logs)       (SQLite database)
 ```
 
-### Key Components
-
-- **backend/**: FastAPI with SQLAlchemy ORM, handles user auth, points system, model configuration, pricing
-- **tencent-function/**: Single Tencent Cloud Function proxy that routes requests to AI providers based on placeholder keys
-- **tencent-api-web/**: Web function format code for Tencent Cloud Functions deployment
-- **user-web/**: User-facing Vue 3 app with Element Plus
-- **admin-web/**: Admin dashboard for model management and system configuration
+**CRITICAL: All AI requests MUST go through Tencent Cloud Functions proxy. The backend NEVER directly calls AI providers.**
 
 ## Key Patterns
 
 ### API Key Pool Pattern (tencent-function/)
 
-The cloud function uses a key pool with random selection:
-- `KEY_POOL.modelscope`: Array of ModelScope API keys
-- `KEY_POOL.t8star`: Array of T8Star API keys
-- Frontend sends requests with placeholder keys (`MODELSCOPE_API_KEY` or `T8STAR_API_KEY`)
-- Cloud function replaces placeholders with real keys from the pool
-- Routes to `api.modelscope.cn` or `ai.t8star.cn` based on placeholder type
+API Keys are stored ONLY in Tencent Cloud Function's `KEY_POOL`, never in database:
+
+```javascript
+// tencent-function/index.js
+const KEY_POOL = {
+  modelscope: ["ms-xxx-01", "ms-xxx-02"],
+  t8star: ["sk-xxx-01", "sk-xxx-02"]
+};
+```
 
 **Request flow:**
 1. Frontend fetches `tencent_function_url` from backend via `GET /api/config/pricing-info`
-2. Frontend sends request to cloud function with `Authorization: Bearer T8STAR_API_KEY` (placeholder)
-3. Cloud function detects placeholder, selects real key from pool, forwards to target AI provider
+2. Frontend sends request to cloud function with placeholder: `Authorization: Bearer MODELSCOPE_API_KEY`
+3. Cloud function replaces placeholder with real key from `KEY_POOL`, forwards to AI provider
 4. Cloud function returns response to frontend
+
+**Placeholders:**
+- `MODELSCOPE_API_KEY` → replaced with ModelScope key
+- `T8STAR_API_KEY` → replaced with T8Star key
 
 ### Points Reserve/Confirm/Refund
 
-The points system uses a 3-step deduction mechanism to prevent double-charging:
+The points system uses a 3-step deduction mechanism:
 
 1. **Reserve**: Pre-deduct points, returns `deduction_id` with 600s expiry
 2. **Confirm**: Mark as consumed after successful generation
 3. **Refund**: Return points if generation fails
 
-See `backend/crud.py` functions: `reserve_points()`, `confirm_points()`, `refund_points()`
+See `backend/crud.py`: `reserve_points()`, `confirm_points()`, `refund_points()`
 
 ### Model Configuration
 
-Models are configured in `ai_models` table with flexible pricing via `model_pricing` table:
-- `billing_mode`: `per_use` or `duration`
-- Pricing rules can add costs for duration, resolution, aspect ratio
-- Frontend options configured via `frontend_config` JSON
+Models are configured in `ai_models` table with `config_schema` JSON field containing:
+- `pricing_rules`: Dynamic pricing configuration
+- `request_mapping`: API request field mapping
+- `response_mapping`: API response extraction rules
+- `frontend_config`: UI options (dropdowns, sliders, etc.)
 
-## Environment Variables
+## Key Components
 
-**Tencent Cloud Functions:**
-```
-# Key Pool (configured in tencent-function/index.js)
-KEY_POOL.modelscope = ["sk-xxx-01", "sk-xxx-02", ...]
-KEY_POOL.t8star = ["sk-xxx-01", "sk-xxx-02", ...]
-```
-
-**Backend:** No special env vars needed; SQLite database created automatically.
+- **backend/**: FastAPI with SQLAlchemy ORM (user auth, points, model config, pricing)
+- **backend/engines/**: `pricing_engine.py`, `payload_builder.py`
+- **tencent-function/**: Cloud function proxy with `KEY_POOL`
+- **user-web/**: Vue 3 app, calls AI via cloud function with placeholders
+- **admin-web/**: Admin dashboard for model/system configuration
 
 ## API Endpoints
 
 **Public APIs:**
 - `POST /auth/register`, `POST /auth/token` - User auth
 - `GET /api/models` - List enabled models
-- `POST /api/calculate-cost` - Calculate generation cost
+- `POST /api/calculate-cost` - Calculate generation cost (legacy)
+- `POST /api/calculate-cost-dynamic` - Calculate cost using config_schema.pricing_rules
+- `POST /api/build-payload` - Build API request payload (for testing)
 - `POST /api/points/reserve|confirm|refund` - Points management
+- `GET /api/config/pricing-info` - Get `tencent_function_url` and pricing info
 
-**Admin APIs (require admin role):**
+**Admin APIs:**
 - `GET/POST/PUT/DELETE /admin/models` - Model CRUD
 - `GET/PUT /admin/config` - System configuration
+- `POST /admin/recharge` - Recharge user points
 
-**Tencent Cloud Functions:**
-- Single proxy endpoint that routes to ModelScope or T8Star based on placeholder key in request
-
-**AI Provider Endpoints (used by frontend):**
-- ModelScope: `https://api-inference.modelscope.cn/v1/chat/completions` (image analysis)
+**Frontend AI Calls (via Tencent Cloud Function):**
+- ModelScope: `https://api-inference.modelscope.cn/v1/chat/completions`
 - T8Star Video: `https://ai.t8star.cn/v2/videos/generations`
 - T8Star Image: `https://ai.t8star.cn/v1/images/generations`
 
-## Deployment
+## Database Models
 
-See `tencent-api-web/DEPLOYMENT_GUIDE.md` for Tencent Cloud Functions deployment instructions.
-
-## Progress Tracking
-
-All 20 features completed. See `feature_list.json` for details.
-
-## Current Status
-
-- **Backend**: Fully functional (FastAPI + SQLite)
-- **Frontend**: User-web and Admin-web complete
-- **AI Proxy**: Tencent Cloud Functions deployed
-  - `tencent-function/index.js`: Single proxy with key pool pattern
-  - `tencent-api-web/`: Contains deployment guide and detailed function implementations
-  - Frontend dynamically fetches function URL from backend config (`tencent_function_url`)
+Key tables (see `backend/models.py`):
+- `users`: User accounts with points and role
+- `ai_models`: AI model configurations with config_schema
+- `model_pricing`: Pricing rules (legacy, being replaced by config_schema)
+- `point_reserves`: Pre-deducted points with 600s expiry
+- `point_logs`: Points transaction history
+- `system_config`: Key-value system settings
 
 ## Important Files
 
-- `backend/crud.py`: Core business logic (points, models, pricing)
-- `backend/models.py`: SQLAlchemy database models
-- `user-web/src/api/index.js`: Frontend API layer with placeholder key pattern
-- `tencent-function/index.js`: Cloud function proxy implementation
+- `backend/main.py`: FastAPI routes
+- `backend/crud.py`: Core business logic
+- `backend/models.py`: Database models
+- `backend/engines/pricing_engine.py`: Dynamic pricing
+- `backend/engines/payload_builder.py`: API request construction
+- `user-web/src/api/index.js`: Frontend AI calls with placeholder pattern
+- `tencent-function/index.js`: Cloud function with `KEY_POOL`
