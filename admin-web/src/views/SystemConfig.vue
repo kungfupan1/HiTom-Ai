@@ -48,6 +48,20 @@
           <div class="form-tip">AI 生成服务的腾讯云函数地址，必须配置才能使用 AI 功能</div>
         </el-form-item>
 
+        <el-divider content-position="left">AI 提示词配置</el-divider>
+
+        <el-form-item label="文案生成系统提示词">
+          <el-input
+            v-model="form.text_system_prompt"
+            type="textarea"
+            :rows="10"
+            placeholder="用于看图写文案功能的系统提示词，支持变量替换..."
+          />
+          <div class="form-tip">
+            支持变量: {target_lang} 目标语言、{product_type} 产品类型、{design_style} 设计风格、{target_num} 生成数量
+          </div>
+        </el-form-item>
+
         <el-form-item>
           <el-button type="primary" @click="handleSave" :loading="loading">
             保存配置
@@ -261,7 +275,8 @@ const form = reactive({
   signup_bonus: 10,
   image_base_price: 2,
   pricing_description: '',
-  tencent_function_url: ''
+  tencent_function_url: '',
+  text_system_prompt: ''
 })
 
 const apiKeys = ref([])
@@ -308,6 +323,7 @@ const loadConfig = async () => {
     form.image_base_price = parseInt(res.image_base_price?.value || '2')
     form.pricing_description = res.pricing_description?.value || ''
     form.tencent_function_url = res.tencent_function_url?.value || ''
+    form.text_system_prompt = res.text_system_prompt?.value || ''
   } catch (error) {
     console.error(error)
   }
@@ -336,7 +352,8 @@ const handleSave = async () => {
         signup_bonus: String(form.signup_bonus),
         image_base_price: String(form.image_base_price),
         pricing_description: form.pricing_description,
-        tencent_function_url: form.tencent_function_url
+        tencent_function_url: form.tencent_function_url,
+        text_system_prompt: form.text_system_prompt
       }
     })
     ElMessage.success('保存成功')

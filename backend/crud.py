@@ -374,7 +374,8 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
         "signup_bonus": int(config_map.get("signup_bonus", "10")),
         "image_base_price": int(config_map.get("image_base_price", "2")),
         "pricing_description": config_map.get("pricing_description", ""),
-        "tencent_function_url": config_map.get("tencent_function_url", "")
+        "tencent_function_url": config_map.get("tencent_function_url", ""),
+        "text_system_prompt": config_map.get("text_system_prompt", "")
     }
 
 

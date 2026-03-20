@@ -362,12 +362,16 @@ async def build_payload(
     api_contract = config_schema.get("api_contract", {})
     prompt_config = config_schema.get("prompt_config", {})
 
+    # 获取全局系统提示词
+    global_system_prompt = crud.get_config(db, "text_system_prompt", "")
+
     # 构建 payload
     payload = payload_builder.build(
         request_mapping=request_mapping,
         form_data=request.form_data,
         model_id=model.model_id,
-        prompt_config=prompt_config
+        prompt_config=prompt_config,
+        global_system_prompt=global_system_prompt
     )
 
     # 提取使用的 prompt

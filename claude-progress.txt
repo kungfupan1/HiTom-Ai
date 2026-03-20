@@ -51,7 +51,18 @@ AI 电商内容生成平台重构项目
   - 报文拼凑引擎 (payload_builder.py)
   - 新增 API: /api/calculate-cost-dynamic
   - 新增 API: /api/build-payload
-- [ ] 系统提示词配置功能
+- [x] 系统提示词配置功能
+  - 管理后台 SystemConfig.vue 添加系统提示词配置
+  - 后端添加 text_system_prompt 配置项
+  - payload_builder 支持全局系统提示词（优先级最高）
+
+---
+
+## 统计
+- 总功能数: 25 (原 20 + 新增 5)
+- 已完成: 25
+- 进行中: 0
+- 未开始: 0
 
 ### 2026-03-18
 - [x] 创建 feature_list.json (20 项功能)

@@ -14,7 +14,8 @@ class PayloadBuilder:
         request_mapping: Dict[str, Any],
         form_data: Dict[str, Any],
         model_id: str = None,
-        prompt_config: Dict[str, Any] = None
+        prompt_config: Dict[str, Any] = None,
+        global_system_prompt: str = None
     ) -> Dict[str, Any]:
         """
         构建请求 payload
@@ -24,6 +25,7 @@ class PayloadBuilder:
             form_data: 用户提交的表单数据
             model_id: 模型 ID（用于动态参数）
             prompt_config: 提示词配置（可选）
+            global_system_prompt: 全局系统提示词（从系统配置读取，优先级最高）
 
         Returns:
             构建好的请求 payload
@@ -60,9 +62,15 @@ class PayloadBuilder:
             prompt_field = dynamic_params.get("prompt", "prompt")
             self._set_nested_value(payload, prompt_field, prompt)
 
-        # 4. 系统提示词（如果有）
-        if prompt_config and "system_prompt" in prompt_config:
-            system_prompt = prompt_config["system_prompt"]
+        # 4. 系统提示词（优先级：全局配置 > 模型配置）
+        system_prompt = global_system_prompt
+        if not system_prompt and prompt_config:
+            # 使用模型配置中的默认系统提示词
+            system_prompt = prompt_config.get("default_system_prompt")
+
+        if system_prompt:
+            # 渲染系统提示词中的变量
+            system_prompt = self._render_template(system_prompt, form_data)
             # 系统提示词通常放在 messages 数组的第一个元素
             if "messages" not in payload:
                 payload["messages"] = []

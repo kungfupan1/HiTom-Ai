@@ -300,6 +300,6 @@
       "后端添加 text_system_prompt 配置项",
       "文案生成接口优先读取配置"
     ],
-    "passes": false
+    "passes": true
   }
 ]
