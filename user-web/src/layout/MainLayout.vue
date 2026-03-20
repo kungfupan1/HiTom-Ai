@@ -4,8 +4,8 @@
       <!-- 侧边栏 -->
       <el-aside :width="isCollapse ? '64px' : '220px'" class="sidebar dark-glass">
         <div class="logo">
-          <span v-if="!isCollapse" class="gradient-text">🤖 Hi-Tom-AI</span>
-          <span v-else class="gradient-text">🤖</span>
+          <span v-if="!isCollapse" class="gradient-text">✨ HiTom-AI</span>
+          <span v-else class="gradient-text">✨</span>
         </div>
 
         <el-menu
@@ -17,14 +17,28 @@
           :collapse="isCollapse"
           class="glass-menu"
         >
-          <el-menu-item index="/ai/video">
-            <el-icon><VideoCamera /></el-icon>
-            <template #title>视频生成</template>
-          </el-menu-item>
-          <el-menu-item index="/ai/image">
-            <el-icon><Picture /></el-icon>
-            <template #title>图片生成</template>
-          </el-menu-item>
+          <el-sub-menu index="ai">
+            <template #title>
+              <el-icon class="gradient-icon"><MagicStick /></el-icon>
+              <span v-show="!isCollapse">AI制图智能体</span>
+            </template>
+            <el-menu-item index="/ai/image">🎨 商品图生成</el-menu-item>
+            <el-menu-item index="/ai/video">🎬 带货视频生成</el-menu-item>
+            <el-menu-item index="/ai/video/general">✨ 普通视频生成</el-menu-item>
+          </el-sub-menu>
+
+          <el-sub-menu index="service">
+            <template #title>
+              <el-icon class="gradient-icon"><Shop /></el-icon>
+              <span v-show="!isCollapse">跨境服务资源</span>
+            </template>
+            <el-menu-item index="/service/shop">🏪 店铺买卖/租赁</el-menu-item>
+            <el-menu-item index="/service/course">📚 课程+陪跑</el-menu-item>
+            <el-menu-item index="/service/logistics">📦 货代/小包/海外仓</el-menu-item>
+            <el-menu-item index="/service/software">💻 增强软件</el-menu-item>
+            <el-menu-item index="/service/network">🌐 网络&硬件服务</el-menu-item>
+            <el-menu-item index="/service/other">🤝 其他合作</el-menu-item>
+          </el-sub-menu>
         </el-menu>
 
         <div class="collapse-btn" @click="isCollapse = !isCollapse">
@@ -105,7 +119,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
-import { Document, Loading } from '@element-plus/icons-vue'
+import { Document, Loading, MagicStick, Shop } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -117,7 +131,7 @@ const logs = ref([])
 const logContainer = ref(null)
 
 const activeMenu = computed(() => route.path)
-const pageTitle = computed(() => route.meta?.title || 'Hi-Tom-AI')
+const pageTitle = computed(() => route.meta?.title || 'HiTom-AI')
 
 const refreshPoints = () => {
   userStore.refreshPoints()
@@ -209,7 +223,16 @@ const handleCommand = (command) => {
   transition: all 0.3s;
 }
 
-:deep(.el-menu-item:hover) {
+:deep(.el-sub-menu__title) {
+  border-radius: 8px;
+  margin-bottom: 5px;
+  color: #a0aec0 !important;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+:deep(.el-menu-item:hover),
+:deep(.el-sub-menu__title:hover) {
   background-color: rgba(255, 255, 255, 0.08) !important;
   color: #fff !important;
 }
@@ -220,6 +243,20 @@ const handleCommand = (command) => {
   color: white !important;
   box-shadow: 0 0 15px rgba(127, 0, 255, 0.5);
   border: 1px solid rgba(255,255,255,0.2);
+}
+
+.gradient-icon {
+  color: #a0aec0;
+}
+
+:deep(.el-menu-item.is-active) .gradient-icon {
+  color: #fff;
+}
+
+/* 子菜单内部项样式 */
+:deep(.el-sub-menu .el-menu-item) {
+  padding-left: 50px !important;
+  min-width: auto;
 }
 
 .collapse-btn {
