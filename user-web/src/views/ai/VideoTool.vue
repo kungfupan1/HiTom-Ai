@@ -6,54 +6,88 @@
           <template #header>
             <div class="card-header">
               <span class="gradient-text">🎬 视频生成控制台</span>
-              <el-tag effect="dark" round color="#ff0055" style="border:none; box-shadow: 0 0 10px rgba(255,0,85,0.4)">{{ currentModel?.display_name || 'AI视频' }}</el-tag>
+              <el-tag effect="dark" round color="#ff0055" style="border:none; box-shadow: 0 0 10px rgba(255,0,85,0.4)">{{ currentModel?.config_schema?.model_info?.display_name || currentModel?.display_name || 'AI视频' }}</el-tag>
             </div>
           </template>
 
-          <el-form :model="form" label-position="top">
+          <el-form :model="dynamicFormData" label-position="top">
             <!-- 动态模型选择 -->
             <el-form-item label="生成模型">
-              <el-select v-model="form.model" style="width: 100%" class="cyber-select" popper-class="cyber-popper" @change="onModelChange">
-                <el-option v-for="m in models" :key="m.model_id" :value="m.model_id" :label="m.display_name" />
+              <el-select v-model="selectedModelId" style="width: 100%" class="cyber-select" popper-class="cyber-popper" @change="onModelChange">
+                <el-option v-for="m in models" :key="m.model_id" :value="m.model_id" :label="m.config_schema?.model_info?.display_name || m.display_name" />
               </el-select>
             </el-form-item>
 
-            <el-form-item label="产品名称 (必填)">
-              <el-input v-model="form.product_type" placeholder="例如：潮汕菜脯" class="cyber-input" />
-            </el-form-item>
+            <!-- ===== 动态渲染 UI Schema ===== -->
+            <template v-for="field in uiSchema" :key="field.field_name">
+              <!-- 跳过模型ID字段，已在上方显示 -->
+              <template v-if="field.field_name !== 'model' && field.field_name !== 'images'">
+                <!-- input 类型 -->
+                <el-form-item v-if="field.ui_type === 'input'" :label="field.label + (field.required ? ' (必填)' : '')">
+                  <el-input
+                    v-model="dynamicFormData[field.field_name]"
+                    :placeholder="field.placeholder || ''"
+                    class="cyber-input"
+                  />
+                </el-form-item>
 
-            <div class="label-box">
-              <span class="label-text">核心卖点 (必填)</span>
-              <el-tooltip content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
-                <el-button
-                  type="primary"
-                  plain
-                  round
-                  size="small"
-                  class="optimize-btn"
-                  @click="analyzeImages"
-                  :loading="analyzing"
-                  :disabled="fileList.length === 0"
-                >
-                  <el-icon class="el-icon--left"><MagicStick /></el-icon>
-                  {{ analyzing ? '正在分析...' : '✨ 看图自动生成文案' }}
-                </el-button>
-              </el-tooltip>
-            </div>
+                <!-- textarea 类型 -->
+                <template v-else-if="field.ui_type === 'textarea'">
+                  <div class="label-box">
+                    <span class="label-text">{{ field.label }}{{ field.required ? ' (必填)' : '' }}</span>
+                    <el-tooltip v-if="field.field_name === 'selling_points'" content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
+                      <el-button type="primary" plain round size="small" class="optimize-btn" @click="analyzeImages" :loading="analyzing" :disabled="fileList.length === 0">
+                        <el-icon class="el-icon--left"><MagicStick /></el-icon>
+                        {{ analyzing ? '正在分析...' : '✨ 看图自动生成文案' }}
+                      </el-button>
+                    </el-tooltip>
+                  </div>
+                  <el-form-item>
+                    <el-input
+                      v-model="dynamicFormData[field.field_name]"
+                      type="textarea"
+                      :rows="field.rows || 6"
+                      :placeholder="field.placeholder || ''"
+                      resize="none"
+                      :maxlength="field.max_length || 5000"
+                      show-word-limit
+                      class="cyber-input"
+                    />
+                  </el-form-item>
+                </template>
 
-            <el-form-item>
-              <el-input
-                v-model="form.selling_points"
-                type="textarea"
-                :rows="6"
-                placeholder="在此处输入文案，或者上传图片后点击上方「看图自动生成文案」按钮..."
-                resize="none"
-                maxlength="5000"
-                show-word-limit
-                class="cyber-input"
-              />
-            </el-form-item>
+                <!-- select 类型 -->
+                <el-form-item v-else-if="field.ui_type === 'select'" :label="field.label">
+                  <el-select
+                    v-model="dynamicFormData[field.field_name]"
+                    class="cyber-select"
+                    popper-class="cyber-popper"
+                    :filterable="field.filterable || false"
+                    @change="field.affects_pricing ? calculateCost() : null"
+                  >
+                    <el-option
+                      v-for="opt in field.options"
+                      :key="opt.value"
+                      :value="opt.value"
+                      :label="opt.label"
+                    />
+                  </el-select>
+                </el-form-item>
 
+                <!-- input-number 类型 -->
+                <el-form-item v-else-if="field.ui_type === 'input-number'" :label="field.label">
+                  <el-input-number
+                    v-model="dynamicFormData[field.field_name]"
+                    :min="field.min || 1"
+                    :max="field.max || 10"
+                    class="cyber-input-number"
+                    @change="field.affects_pricing ? calculateCost() : null"
+                  />
+                </el-form-item>
+              </template>
+            </template>
+
+            <!-- 参考图片上传 (特殊处理) -->
             <el-form-item label="参考图片 (最多5张)">
               <el-upload
                 action="#"
@@ -67,100 +101,6 @@
               >
                 <el-icon><Plus /></el-icon>
               </el-upload>
-            </el-form-item>
-
-            <el-divider content-position="left" class="cyber-divider">策略配置</el-divider>
-
-            <el-row :gutter="10">
-              <el-col :span="12">
-                <el-form-item label="投放地区">
-                  <el-select v-model="form.region" class="cyber-select" popper-class="cyber-popper">
-                    <el-option value="东亚 (中日韩)" label="东亚 (中日韩)" />
-                    <el-option value="东南亚" label="东南亚" />
-                    <el-option value="欧美" label="欧美" />
-                    <el-option value="中东" label="中东" />
-                    <el-option value="非洲" label="非洲" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="目标语言">
-                  <el-select v-model="form.language" filterable placeholder="请选择语言" class="cyber-select" popper-class="cyber-popper">
-                    <el-option value="日语 (Japanese)" label="日语" />
-                    <el-option value="英语 (English)" label="英语" />
-                    <el-option value="中文 (Chinese)" label="中文" />
-                    <el-option value="韩语 (Korean)" label="韩语" />
-                    <el-option value="法语 (French)" label="法语" />
-                    <el-option value="德语 (German)" label="德语" />
-                    <el-option value="俄语 (Russian)" label="俄语" />
-                    <el-option value="西班牙语 (Spanish)" label="西班牙语" />
-                    <el-option value="阿拉伯语 (Arabic)" label="阿拉伯语" />
-                    <el-option value="葡萄牙语 (Portuguese)" label="葡萄牙语" />
-                    <el-option value="越南语 (Vietnamese)" label="越南语" />
-                    <el-option value="泰语 (Thai)" label="泰语" />
-                    <el-option value="印尼语 (Indonesian)" label="印尼语" />
-                    <el-option value="意大利语 (Italian)" label="意大利语" />
-                    <el-option value="马来语 (Malay)" label="马来语" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="10">
-              <el-col :span="12">
-                <el-form-item label="产品类目">
-                  <el-select v-model="form.category" class="cyber-select" popper-class="cyber-popper">
-                    <el-option value="食品饮料" label="食品饮料" />
-                    <el-option value="美妆护肤" label="美妆护肤" />
-                    <el-option value="数码家电" label="数码家电" />
-                    <el-option value="服装配饰" label="服装配饰" />
-                    <el-option value="家居日用" label="家居日用" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="视频风格">
-                  <el-select v-model="form.style" placeholder="请选择风格" class="cyber-select" popper-class="cyber-popper">
-                    <el-option value="UGC 种草" label="UGC 种草" />
-                    <el-option value="产品口播" label="产品口播" />
-                    <el-option value="产品演示" label="产品演示" />
-                    <el-option value="TVC 广告" label="TVC 广告" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-divider content-position="left" class="cyber-divider">技术参数</el-divider>
-
-            <el-row :gutter="10">
-              <el-col :span="12">
-                <el-form-item label="画面比例">
-                  <el-select v-model="form.aspect_ratio" class="cyber-select" popper-class="cyber-popper" @change="calculateCost">
-                    <el-option v-for="r in (currentModel?.frontend_config?.ratios || ['9:16', '16:9', '1:1'])" :key="r" :value="r" :label="getRatioLabel(r)" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="时长(秒)">
-                  <el-select v-model="form.duration" class="cyber-select" popper-class="cyber-popper" @change="calculateCost">
-                    <el-option v-for="d in (currentModel?.frontend_config?.durations || [5, 10, 15, 25])" :key="d" :value="d" :label="d + '秒'" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-row :gutter="10">
-              <el-col :span="12">
-                <el-form-item label="分辨率">
-                  <el-select v-model="form.resolution" class="cyber-select" popper-class="cyber-popper" @change="calculateCost">
-                    <el-option v-for="res in (currentModel?.frontend_config?.resolutions || [{value: '720P', label: '标清'}, {value: '1080P', label: '高清'}])" :key="res.value" :value="res.value" :label="res.label" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <el-form-item>
-              <el-checkbox v-model="form.hd" label="高清模式 (HD)" border class="cyber-checkbox" />
             </el-form-item>
 
             <!-- 费用信息 -->
@@ -186,11 +126,11 @@
         </el-card>
 
         <!-- 费用说明卡片 -->
-        <el-card v-if="currentModel?.pricing_description" class="cyber-glass pricing-card" shadow="never" style="margin-top: 16px;">
+        <el-card v-if="pricingDescription" class="cyber-glass pricing-card" shadow="never" style="margin-top: 16px;">
           <template #header>
             <span class="gradient-text">💰 费用说明</span>
           </template>
-          <div class="pricing-desc" v-html="formatDescription(currentModel.pricing_description)"></div>
+          <div class="pricing-desc" v-html="formatDescription(pricingDescription)"></div>
         </el-card>
       </el-col>
 
@@ -208,11 +148,7 @@
           <div v-if="taskStatus === 'processing'" class="processing-state">
             <el-progress type="dashboard" :percentage="progress" color="#00f260" :stroke-width="10" />
             <p style="margin-top: 20px; font-weight: bold; color: #fff;">正在渲染视频...</p>
-            <p style="color: #a0aec0; font-size: 12px;">(Sora生成较慢，请耐心等待 3-5 分钟)</p>
-            <div class="script-box" v-if="scriptContent">
-               <h4 style="color: #00f260;">📝 AI 编写的分镜脚本：</h4>
-               <pre>{{ scriptContent }}</pre>
-            </div>
+            <p style="color: #a0aec0; font-size: 12px;">(视频生成较慢，请耐心等待)</p>
           </div>
 
           <div v-if="videoUrl" class="result-state">
@@ -230,81 +166,110 @@
 
 <script setup>
 import { Plus, MagicStick } from '@element-plus/icons-vue'
-import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
+import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import request from '@/api/request'
-import { analyzeImages as analyzeImagesAPI, generateVideo, getVideoStatus } from '@/api/index'
+import { generateVideo, getVideoStatus } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
-const emit = defineEmits(['refresh-points'])
+const emit = defineEmits(['refresh-points', 'log'])
 const userStore = useUserStore()
 
+// ========== 状态 ==========
 const loading = ref(false)
 const analyzing = ref(false)
 const taskId = ref('')
 const taskStatus = ref('')
 const progress = ref(0)
 const videoUrl = ref('')
-const scriptContent = ref('')
 const fileList = ref([])
 const imageBase64List = ref([])
+const currentDeductionId = ref(null)
 
-// 模型相关
+// ========== 模型相关 ==========
 const models = ref([])
 const currentModel = ref(null)
+const selectedModelId = ref('')
 
-const form = reactive({
-  model: '',
-  product_type: '',
-  selling_points: '',
-  region: '东亚 (中日韩)',
-  language: '日语 (Japanese)',
-  category: '食品饮料',
-  style: 'UGC 种草',
-  aspect_ratio: '9:16',
-  duration: 10,
-  resolution: '720P',
-  hd: false
+// ========== 动态表单数据 ==========
+const dynamicFormData = reactive({})
+
+// 计算属性：UI Schema
+const uiSchema = computed(() => {
+  return currentModel.value?.config_schema?.ui_schema || []
 })
 
-// 费用计算
+// 计算属性：费用说明
+const pricingDescription = computed(() => {
+  return currentModel.value?.config_schema?.pricing_rules?.description ||
+         currentModel.value?.pricing_description || ''
+})
+
+// ========== 费用计算 ==========
 const costInfo = ref({ cost: 0, breakdown: null })
 
 const canGenerate = computed(() => {
-  return form.model && form.product_type && form.selling_points && costInfo.value.cost > 0
+  // 检查必填字段
+  const requiredFields = uiSchema.value.filter(f => f.required).map(f => f.field_name)
+  const hasAllRequired = requiredFields.every(f => dynamicFormData[f])
+  return selectedModelId.value && hasAllRequired && costInfo.value.cost > 0
 })
 
-// 加载模型列表
+// ========== 加载模型 ==========
 const loadModels = async () => {
   try {
     const res = await request.get('/api/models?model_type=video')
     models.value = res
     if (res.length > 0) {
-      form.model = res[0].model_id
+      selectedModelId.value = res[0].model_id
       await onModelChange()
     }
   } catch (e) {
     console.error('加载模型失败', e)
+    ElMessage.error('加载模型失败')
   }
 }
 
-// 模型切换
+// ========== 模型切换（含防呆逻辑）==========
 const onModelChange = async () => {
-  if (!form.model) return
+  if (!selectedModelId.value) return
+
   try {
-    const res = await request.get(`/api/models/${form.model}`)
+    const res = await request.get(`/api/models/${selectedModelId.value}`)
     currentModel.value = res
 
-    // 设置默认值
-    if (res.frontend_config?.durations?.length) {
-      form.duration = res.frontend_config.durations[0]
+    // 确保 config_schema 存在
+    if (typeof res.config_schema === 'string') {
+      try {
+        res.config_schema = JSON.parse(res.config_schema)
+      } catch {}
     }
-    if (res.frontend_config?.ratios?.length) {
-      form.aspect_ratio = res.frontend_config.ratios[0]
-    }
-    if (res.frontend_config?.resolutions?.length) {
-      form.resolution = res.frontend_config.resolutions[0].value
-    }
+
+    const schema = res.config_schema?.ui_schema || []
+
+    // ===== 防呆逻辑：检查旧值是否在新 options 内 =====
+    schema.forEach(field => {
+      const oldValue = dynamicFormData[field.field_name]
+
+      if (field.ui_type === 'select' && field.options) {
+        const validValues = field.options.map(o => o.value)
+        if (oldValue === undefined || !validValues.includes(oldValue)) {
+          // 不合法，覆盖为默认值
+          dynamicFormData[field.field_name] = field.default_value ?? validValues[0]
+        }
+      } else if (field.ui_type === 'input-number') {
+        // 数字类型校验
+        const num = Number(oldValue)
+        if (isNaN(num) || num < (field.min || 1) || num > (field.max || 10)) {
+          dynamicFormData[field.field_name] = field.default_value ?? field.min ?? 1
+        }
+      } else {
+        // 其他类型直接使用默认值
+        if (oldValue === undefined) {
+          dynamicFormData[field.field_name] = field.default_value ?? ''
+        }
+      }
+    })
 
     await calculateCost()
   } catch (e) {
@@ -312,35 +277,34 @@ const onModelChange = async () => {
   }
 }
 
-// 计算费用
+// ========== 费用计算 ==========
 const calculateCost = async () => {
-  if (!form.model) return
+  if (!selectedModelId.value) return
+
   try {
     const res = await request.post('/api/calculate-cost', {
-      model_id: form.model,
-      duration: form.duration,
-      resolution: form.resolution,
-      ratio: form.aspect_ratio,
+      model_id: selectedModelId.value,
+      duration: dynamicFormData.duration,
+      resolution: dynamicFormData.resolution,
+      ratio: dynamicFormData.aspect_ratio,
       count: 1
     })
     costInfo.value = res
   } catch (e) {
     console.error('计算费用失败', e)
+    // 使用 config_schema 中的计费规则
+    const pricingRules = currentModel.value?.config_schema?.pricing_rules
+    if (pricingRules?.mode === 'fixed') {
+      costInfo.value = { cost: pricingRules.fixed_cost || 0 }
+    } else if (pricingRules?.mode === 'dynamic') {
+      const duration = dynamicFormData.duration || 10
+      const durationPricing = pricingRules.duration_pricing || {}
+      costInfo.value = { cost: durationPricing[String(duration)] || pricingRules.unit_price * duration || 0 }
+    }
   }
 }
 
-// 比例标签
-const getRatioLabel = (r) => {
-  const labels = { '9:16': '9:16 (手机竖屏)', '16:9': '16:9 (横屏)', '1:1': '1:1 (方形)', '2:3': '2:3', '3:2': '3:2' }
-  return labels[r] || r
-}
-
-// 格式化描述
-const formatDescription = (text) => {
-  return text?.replace(/\n/g, '<br>') || ''
-}
-
-// 文件处理
+// ========== 文件处理 ==========
 const handleFileChange = (uploadFile, uploadFiles) => {
   fileList.value = uploadFiles
   convertImagesToBase64()
@@ -362,101 +326,72 @@ const convertImagesToBase64 = () => {
   })
 }
 
-// 图片分析 - 看图生成文案
+// ========== 图片分析 ==========
 const analyzeImages = async () => {
   if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传图片')
   analyzing.value = true
-
-  // 发送日志
   emit('log', '开始分析图片...')
 
   try {
-// ==========================================
-    // 1. 动态获取后台配置的腾讯云函数地址
-    // ==========================================
-    emit('log', `正在获取系统配置...`)
-    // 调用封装好的 axios 实例去后端拿配置
     const configRes = await request.get('/api/config/pricing-info')
     const CLOUD_FUNCTION_URL = configRes.tencent_function_url || ''
 
     if (!CLOUD_FUNCTION_URL) {
-      throw new Error('腾讯云函数 URL 未配置，请在管理后台的【系统配置】中设置！')
+      throw new Error('腾讯云函数 URL 未配置')
     }
 
-    emit('log', `准备发送至云函数网关...`)
-    emit('log', `上传图片数: ${imageBase64List.value.length}`)
+    const userPrompt = `产品名称：${dynamicFormData.product_type || '未知产品'}。请根据图片提取产品的核心卖点。直接返回商品卖点文案即可，不要多余废话。`
 
-    // ... 下面的构造 requestBody 和 fetch 逻辑保持不变 ...
-
-    // 2. 构造通用大模型视觉接口的请求体 (这里以 ModelScope 的 qwen-vl-plus 为例)
-    const userPrompt = `产品名称：${form.product_type || '未知产品'}。请根据图片提取产品的核心卖点，要求视频风格：${form.style}，目标受众语言：${form.language.split(' (')[0]}。直接返回商品卖点文案即可，不要多余废话。`
-
-    const contentArray = [
-      { type: "text", text: userPrompt }
-    ];
-
+    const contentArray = [{ type: "text", text: userPrompt }]
     imageBase64List.value.forEach(base64 => {
-       contentArray.push({ type: "image_url", image_url: { url: base64 } })
-    });
+      contentArray.push({ type: "image_url", image_url: { url: base64 } })
+    })
 
     const requestBody = {
       target_url: 'https://api-inference.modelscope.cn/v1/chat/completions',
       model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
       messages: [{ role: "user", content: contentArray }]
-    };
-
-    // 3. 使用原生 fetch 发送请求（完美绕过本地 token 拦截器）
-    emit('log', '正在调用 AI 分析图片 (通过云函数)...')
+    }
 
     const response = await fetch(CLOUD_FUNCTION_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // 【核心魔法】直接塞入占位符！
         'Authorization': `Bearer MODELSCOPE_API_KEY`
       },
       body: JSON.stringify(requestBody)
-    });
+    })
 
-    if (!response.ok) {
-      throw new Error(`云函数请求失败，状态码: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`请求失败: ${response.status}`)
 
-    const data = await response.json();
-    emit('log', `API 返回状态: success`)
-
-    // 4. 解析云函数原封不动返回的大模型结果
-    const content = data.choices?.[0]?.message?.content || "";
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content || ""
 
     if (content) {
-      form.selling_points = content
+      dynamicFormData.selling_points = content
       ElMessage.success('文案生成成功！')
       emit('log', '文案生成成功！')
     } else {
-      ElMessage.error('未能解析出文案，请重试')
-      emit('log', `生成失败，大模型返回原始数据: ${JSON.stringify(data)}`)
+      ElMessage.error('未能解析出文案')
     }
-
   } catch (e) {
     console.error('分析失败', e)
-    emit('log', `分析失败: ${e.message || '未知错误'}`)
     ElMessage.error('分析失败: ' + (e.message || '未知错误'))
   } finally {
     analyzing.value = false
   }
 }
 
-
-// 👇 新增：在组件顶部（或方法外侧）声明一个变量，用于在不同方法间共享扣费ID，以便异步退款
-const currentDeductionId = ref(null)
-
-// 提交任务
+// ========== 提交任务 ==========
 const submitTask = async () => {
-  if (!form.product_type || !form.selling_points) {
-    return ElMessage.warning('请填写完整信息')
+  // 检查必填字段
+  const requiredFields = uiSchema.value.filter(f => f.required).map(f => f.field_name)
+  for (const f of requiredFields) {
+    if (!dynamicFormData[f]) {
+      return ElMessage.warning(`请填写 ${uiSchema.value.find(u => u.field_name === f)?.label || f}`)
+    }
   }
 
-  // 检查积分
   if (userStore.points < costInfo.value.cost) {
     return ElMessage.warning('积分不足，请充值')
   }
@@ -475,28 +410,31 @@ const submitTask = async () => {
   taskStatus.value = 'processing'
   progress.value = 5
   videoUrl.value = ''
-  currentDeductionId.value = null // 每次提交前重置
+  currentDeductionId.value = null
 
   emit('log', '开始视频生成任务...')
 
   try {
+    // 预扣积分
     emit('log', '步骤1: 预扣积分...')
     const reserveRes = await request.post('/api/points/reserve', {
       amount: costInfo.value.cost,
-      model_id: form.model
+      model_id: selectedModelId.value
     })
-    currentDeductionId.value = reserveRes.deduction_id // 保存扣费ID供全局使用
+    currentDeductionId.value = reserveRes.deduction_id
     emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
 
-    const prompt = `产品: ${form.product_type}\n卖点: ${form.selling_points}\n风格: ${form.style}\n类目: ${form.category}\n语言: ${form.language}\n地区: ${form.region}`
+    // 构建 prompt
+    const prompt = `产品: ${dynamicFormData.product_type || ''}\n卖点: ${dynamicFormData.selling_points || ''}\n风格: ${dynamicFormData.style || ''}\n类目: ${dynamicFormData.category || ''}\n语言: ${dynamicFormData.language || ''}\n地区: ${dynamicFormData.region || ''}`
 
-    emit('log', `步骤2: 调用 ${form.model} 生成视频...`)
+    // 调用生成 API
+    emit('log', `步骤2: 调用 ${selectedModelId.value} 生成视频...`)
     const videoRes = await generateVideo({
-      model: form.model,
+      model: selectedModelId.value,
       prompt: prompt,
-      duration: form.duration,
-      ratio: form.aspect_ratio,
-      resolution: form.resolution,
+      duration: dynamicFormData.duration,
+      ratio: dynamicFormData.aspect_ratio,
+      resolution: dynamicFormData.resolution,
       images: imageBase64List.value
     })
 
@@ -506,17 +444,20 @@ const submitTask = async () => {
     taskId.value = actualTaskId
     emit('log', `任务已提交，task_id: ${taskId.value}`)
 
+    // 确认扣费
     await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
     emit('log', '积分扣费已确认')
 
     userStore.refreshPoints()
     emit('refresh-points')
 
+    // 开始轮询
     emit('log', '开始轮询生成状态...')
     startStatusPolling()
 
     ElMessage.success('视频生成任务已提交')
   } catch (e) {
+    // 失败退款
     if (currentDeductionId.value) {
       try {
         await request.post('/api/points/refund', {
@@ -533,7 +474,7 @@ const submitTask = async () => {
   }
 }
 
-// 状态轮询
+// ========== 状态轮询（使用 response_mapping 解析）==========
 let statusTimer = null
 let errorCount = 0
 
@@ -541,81 +482,105 @@ const startStatusPolling = () => {
   stopStatusPolling()
   errorCount = 0
 
+  const responseMapping = currentModel.value?.config_schema?.response_mapping || {}
+  const pollingConfig = currentModel.value?.config_schema?.polling_config || { interval: 15000 }
+
   statusTimer = setInterval(async () => {
     try {
-      const res = await getVideoStatus(taskId.value, form.model)
+      const res = await getVideoStatus(taskId.value, selectedModelId.value)
 
-      // 🚨 修复核心：不再“自作聪明”地去层叠赋值，而是精准提取每个字段
-      // T8Star 的 status/progress 通常在最外层，但也防一手套娃的情况
-      const apiStatus = res.status || res.data?.status || 'pending'
+      // ===== 使用 response_mapping 提取状态 =====
+      const statusPath = responseMapping.status_path || 'status'
+      const progressPath = responseMapping.progress_path || 'progress'
+      const resultUrlPath = responseMapping.result_url_path || 'data.output'
+      const errorPath = responseMapping.error_path || 'fail_reason'
+
+      // 解析 JSON Path
+      const apiStatus = getJsonValue(res, statusPath) || 'pending'
       const rawStatus = String(apiStatus).toLowerCase()
+      const errMsg = getJsonValue(res, errorPath) || '未知错误'
+      const prog = getJsonValue(res, progressPath) || 0
 
-      // Grok 的报错信息通常放在 fail_reason 字段
-      const errMsg = res.fail_reason || res.error?.message || res.message || res.data?.error || '未知错误'
-
-      const prog = res.progress || res.data?.progress || 0
       progress.value = Math.min(99, parseInt(prog))
 
-      if (['success', 'completed', 'succeeded'].includes(rawStatus)) {
+      // 状态映射
+      const statusMapping = responseMapping.status_mapping || {
+        success: ['success', 'completed', 'succeeded'],
+        processing: ['processing', 'pending', 'running'],
+        failed: ['failed', 'error', 'failure', 'rejected', 'canceled']
+      }
+
+      if (statusMapping.success?.some(s => rawStatus.includes(s))) {
         clearInterval(statusTimer)
         progress.value = 100
-        // Grok 的视频链接在 data.output 里，但也兼容其他格式
-        videoUrl.value = res.data?.output || res.video_url || res.data?.video_url || res.url
+        videoUrl.value = getJsonValue(res, resultUrlPath)
         taskStatus.value = 'success'
         loading.value = false
         ElMessage.success('视频生成完成！')
       }
-      else if (
-        ['failed', 'error', 'failure', 'rejected', 'canceled'].includes(rawStatus) ||
-        (errMsg !== '未知错误' && (errMsg.includes('受限') || errMsg.includes('失败') || errMsg.includes('error') || errMsg.includes('频率')))
-      ) {
+      else if (statusMapping.failed?.some(s => rawStatus.includes(s)) || (errMsg && errMsg !== '未知错误' && errMsg.includes('失败'))) {
         clearInterval(statusTimer)
         taskStatus.value = 'fail'
         loading.value = false
         ElMessage.error('任务生成失败: ' + errMsg)
-        emit('log', `任务被中转商或官方异常中断: ${errMsg}`)
+        emit('log', `任务失败: ${errMsg}`)
 
-        // 异步任务失败退款机制保持不变
+        // 自动退款
         if (currentDeductionId.value) {
           try {
             await request.post('/api/points/refund', {
               deduction_id: currentDeductionId.value,
-              reason: '视频生成过程中断: ' + errMsg
+              reason: '视频生成失败: ' + errMsg
             })
             userStore.refreshPoints()
             emit('refresh-points')
-            emit('log', '💰 检测到生成失败，扣除的积分已自动全额退还')
-          } catch (err) {
-            console.error('自动退款请求失败', err)
-          }
+            emit('log', '积分已自动退还')
+          } catch (err) {}
         }
-      } else if (rawStatus === 'undefined' || rawStatus === '') {
-        // 防止由于数据结构巨变导致的永久死循环
-        errorCount++
       } else {
-        // 正常排队或处理中，清空错误计数
         errorCount = 0
       }
 
-      // 如果连续 5 次拿不到正常的 JSON 结构（防止再次出现死循环的情况）
       if (errorCount >= 5) {
         clearInterval(statusTimer)
         taskStatus.value = 'fail'
         loading.value = false
-        ElMessage.error('无法解析任务状态，已自动中止查询')
+        ElMessage.error('无法解析任务状态')
       }
-
     } catch (e) {
-      console.error('状态查询网络异常', e)
+      console.error('状态查询异常', e)
       errorCount++
       if (errorCount >= 5) {
         clearInterval(statusTimer)
         taskStatus.value = 'fail'
         loading.value = false
-        ElMessage.error('查询状态网络异常，已自动中止查询，请稍后前往历史记录查看。')
+        ElMessage.error('查询状态网络异常')
       }
     }
-  }, 15000) // 保持 15 秒轮询频率防封控
+  }, pollingConfig.interval || 15000)
+}
+
+// JSON Path 解析工具
+const getJsonValue = (obj, path) => {
+  if (!path || !obj) return null
+
+  // 处理简单的点分隔路径，如 "data.output"
+  const keys = path.split('.')
+  let value = obj
+
+  for (const key of keys) {
+    // 处理数组索引，如 "data[0].url"
+    const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
+    if (arrayMatch) {
+      const [, arrKey, index] = arrayMatch
+      value = value?.[arrKey]?.[parseInt(index)]
+    } else {
+      value = value?.[key]
+    }
+    if (value === undefined) return null
+  }
+
+  return value
 }
 
 const stopStatusPolling = () => {
@@ -625,8 +590,12 @@ const stopStatusPolling = () => {
   }
 }
 
+// ========== 辅助函数 ==========
+const formatDescription = (text) => {
+  return text?.replace(/\n/g, '<br>') || ''
+}
 
-
+// ========== 生命周期 ==========
 onMounted(() => {
   loadModels()
 })
@@ -686,11 +655,6 @@ onUnmounted(() => {
 }
 :deep(.el-upload--picture-card:hover) { border-color: #0575e6 !important; color: #fff !important; }
 
-:deep(.el-checkbox__inner) { background: rgba(0,0,0,0.3) !important; border-color: rgba(255,255,255,0.3) !important; }
-:deep(.el-checkbox__label) { color: #a0aec0 !important; }
-:deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background: #00f260 !important; border-color: #00f260 !important; }
-:deep(.el-checkbox__input.is-checked + .el-checkbox__label) { color: #00f260 !important; }
-
 /* 4. 按钮 & 文本 */
 .gradient-text { font-size: 18px; font-weight: 800; background: linear-gradient(90deg, #00f260, #0575e6); -webkit-background-clip: text; color: transparent; text-shadow: 0 0 10px rgba(5, 117, 230, 0.3); }
 .label-box { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; }
@@ -700,8 +664,6 @@ onUnmounted(() => {
 .neon-btn:hover { opacity: 0.9; }
 .optimize-btn { background: transparent !important; border: 1px solid #e6a23c !important; color: #e6a23c !important; }
 .cyber-action-btn { background: rgba(0, 242, 96, 0.2) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
-.cyber-divider { border-color: rgba(255,255,255,0.1); }
-:deep(.el-divider__text) { background-color: transparent; color: #00f260; }
 
 /* 费用信息框 */
 .cost-info-box {
@@ -741,12 +703,6 @@ onUnmounted(() => {
 .empty-state { padding: 50px 0; text-align: center; color: #718096; }
 .placeholder-icon { font-size: 60px; margin-bottom: 20px; opacity: 0.5; color: #a0aec0; }
 .processing-state { text-align: center; padding: 40px; }
-.script-box {
-  margin-top: 30px; text-align: left;
-  background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);
-  padding: 15px; border-radius: 4px; font-size: 13px; color: #a0aec0;
-  max-height: 200px; overflow-y: auto; white-space: pre-wrap;
-}
 .result-state { text-align: center; }
 
 /* 6. 响应式布局间距 */
@@ -770,7 +726,4 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1) !important; color: #fff !important;
 }
 .cyber-popper .el-select-dropdown__item.is-selected { color: #00f260 !important; font-weight: bold; }
-.cyber-popper .el-popper__arrow::before {
-  background: rgba(0, 0, 0, 0.4) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important;
-}
 </style>

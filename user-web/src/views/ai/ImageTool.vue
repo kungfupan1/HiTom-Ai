@@ -1,162 +1,189 @@
 <template>
   <div class="image-tool">
     <div class="cyber-container">
-      <el-tabs v-model="activeTab" type="border-card" class="cyber-tabs">
+      <el-card class="cyber-glass" shadow="never">
+        <template #header>
+          <div class="card-header">
+            <span class="gradient-text">🎨 图片生成控制台</span>
+            <el-tag effect="dark" round color="#0575e6" style="border:none;">{{ currentModel?.config_schema?.model_info?.display_name || currentModel?.display_name || 'AI绘图' }}</el-tag>
+          </div>
+        </template>
 
-        <el-tab-pane label="单任务生成" name="single">
-          <el-row :gutter="24">
-            <el-col :xs="24" :sm="24" :md="10" :lg="10">
-              <el-form label-position="top">
-                <!-- 动态模型选择 -->
-                <el-form-item label="选择模型">
-                  <el-select v-model="form.model" style="width: 100%" class="cyber-select" popper-class="cyber-popper" @change="onModelChange">
-                    <el-option
-                      v-for="model in models"
-                      :key="model.model_id"
-                      :label="model.display_name"
-                      :value="model.model_id"
-                    />
-                  </el-select>
-                </el-form-item>
-
-                <el-form-item label="提示词 (必填)">
-                  <el-input
-                    v-model="form.prompt"
-                    type="textarea"
-                    :rows="6"
-                    placeholder="描述你想生成的图片内容..."
-                    class="cyber-input"
-                    maxlength="5000"
-                    show-word-limit
+        <el-row :gutter="24">
+          <el-col :xs="24" :sm="24" :md="10" :lg="10">
+            <el-form :model="dynamicFormData" label-position="top">
+              <!-- 动态模型选择 -->
+              <el-form-item label="选择模型">
+                <el-select v-model="selectedModelId" style="width: 100%" class="cyber-select" popper-class="cyber-popper" @change="onModelChange">
+                  <el-option
+                    v-for="model in models"
+                    :key="model.model_id"
+                    :label="model.config_schema?.model_info?.display_name || model.display_name"
+                    :value="model.model_id"
                   />
-                </el-form-item>
+                </el-select>
+              </el-form-item>
 
-                <el-row :gutter="10">
-                  <el-col :span="12">
-                    <el-form-item label="画面比例">
-                      <el-select v-model="form.ratio" class="cyber-select" popper-class="cyber-popper" @change="calculateCost">
-                        <el-option
-                          v-for="r in (currentModel?.frontend_config?.ratios || ['1:1', '3:4', '16:9', '9:16'])"
-                          :key="r"
-                          :value="r"
-                          :label="r"
-                        />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                  <el-col :span="12">
-                    <el-form-item label="分辨率">
-                      <el-select v-model="form.resolution" class="cyber-select" popper-class="cyber-popper" @change="calculateCost">
-                        <el-option
-                          v-for="res in (currentModel?.frontend_config?.resolutions || [{value: '1024x1024', label: '1K'}, {value: '2048x2048', label: '2K'}])"
-                          :key="res.value || res"
-                          :value="res.value || res"
-                          :label="res.label || res"
-                        />
-                      </el-select>
-                    </el-form-item>
-                  </el-col>
-                </el-row>
+              <!-- ===== 动态渲染 UI Schema ===== -->
+              <template v-for="field in uiSchema" :key="field.field_name">
+                <template v-if="field.field_name !== 'model' && field.field_name !== 'ref_images' && field.field_name !== 'images'">
+                  <!-- input 类型 -->
+                  <el-form-item v-if="field.ui_type === 'input'" :label="field.label + (field.required ? ' (必填)' : '')">
+                    <el-input
+                      v-model="dynamicFormData[field.field_name]"
+                      :placeholder="field.placeholder || ''"
+                      class="cyber-input"
+                    />
+                  </el-form-item>
 
-                <el-form-item label="生成数量">
-                  <el-input-number v-model="form.count" :min="1" :max="4" class="cyber-input-number" @change="calculateCost" />
-                </el-form-item>
+                  <!-- textarea 类型 -->
+                  <el-form-item v-else-if="field.ui_type === 'textarea'" :label="field.label + (field.required ? ' (必填)' : '')">
+                    <el-input
+                      v-model="dynamicFormData[field.field_name]"
+                      type="textarea"
+                      :rows="field.rows || 6"
+                      :placeholder="field.placeholder || ''"
+                      resize="none"
+                      :maxlength="field.max_length || 5000"
+                      show-word-limit
+                      class="cyber-input"
+                    />
+                  </el-form-item>
 
-                <!-- 费用说明区域 -->
-                <div class="cost-panel cyber-glass">
-                  <div class="cost-header">
-                    <span class="gradient-text">费用明细</span>
-                  </div>
-                  <div class="cost-items">
-                    <div class="cost-item">
-                      <span>当前积分</span>
-                      <span class="value">{{ userStore.points }}</span>
-                    </div>
-                    <div class="cost-item">
-                      <span>消耗积分</span>
-                      <span class="value cost">{{ costInfo.cost }}</span>
-                    </div>
-                    <div class="cost-item">
-                      <span>剩余积分</span>
-                      <span class="value" :class="{ warning: remainingPoints < 0 }">{{ remainingPoints }}</span>
-                    </div>
-                  </div>
-                  <div v-if="pricingDescription" class="pricing-desc">
-                    <el-icon><InfoFilled /></el-icon>
-                    <span>{{ pricingDescription }}</span>
-                  </div>
-                </div>
-
-                <div style="display: flex; gap: 10px; margin-top: 20px;">
-                  <el-button
-                    type="primary"
-                    size="large"
-                    class="neon-btn"
-                    style="flex: 1"
-                    @click="handleGenerate"
-                    :loading="generating"
-                    :disabled="!canGenerate"
-                  >
-                    开始生成
-                  </el-button>
-                </div>
-              </el-form>
-            </el-col>
-
-            <el-col :xs="24" :sm="24" :md="14" :lg="14" class="right-panel-col">
-              <div class="result-header">
-                <span class="gradient-text">生成结果 ({{ generatedImages.length }})</span>
-                <el-button
-                  v-if="generatedImages.length > 0"
-                  type="success"
-                  size="small"
-                  class="cyber-action-btn"
-                  @click="downloadAllImages"
-                >
-                  一键打包下载
-                </el-button>
-              </div>
-
-              <div class="gallery-area cyber-glass-inset">
-                <el-empty v-if="generatedImages.length === 0" description="生成的图片将显示在这里" :image-size="100" />
-                <div v-else class="image-grid">
-                  <div v-for="(img, index) in generatedImages" :key="index" class="img-card-wrapper cyber-border">
-                    <el-image
-                      :src="img"
-                      :preview-src-list="generatedImages"
-                      :initial-index="index"
-                      class="generated-img"
-                      :lazy="true"
+                  <!-- select 类型 -->
+                  <el-form-item v-else-if="field.ui_type === 'select'" :label="field.label">
+                    <el-select
+                      v-model="dynamicFormData[field.field_name]"
+                      class="cyber-select"
+                      popper-class="cyber-popper"
+                      :filterable="field.filterable || false"
+                      @change="field.affects_pricing ? calculateCost() : null"
                     >
-                      <template #placeholder>
-                        <div class="image-slot">加载中...</div>
-                      </template>
-                    </el-image>
-                    <div class="hover-mask">
-                      <div class="mask-actions">
-                        <el-tooltip content="下载原图" placement="top">
-                          <el-button circle type="success" class="mask-btn" @click="downloadSingleImage(img, index)">
-                            <el-icon><Download /></el-icon>
-                          </el-button>
-                        </el-tooltip>
-                      </div>
+                      <el-option
+                        v-for="opt in field.options"
+                        :key="opt.value"
+                        :value="opt.value"
+                        :label="opt.label"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <!-- input-number 类型 -->
+                  <el-form-item v-else-if="field.ui_type === 'input-number'" :label="field.label">
+                    <el-input-number
+                      v-model="dynamicFormData[field.field_name]"
+                      :min="field.min || 1"
+                      :max="field.max || 10"
+                      class="cyber-input-number"
+                      @change="field.affects_pricing ? calculateCost() : null"
+                    />
+                  </el-form-item>
+                </template>
+              </template>
+
+              <!-- 参考图片上传 (特殊字段) -->
+              <el-form-item v-if="hasUploadField" label="参考图片">
+                <el-upload
+                  action="#"
+                  list-type="picture-card"
+                  :auto-upload="false"
+                  :limit="uploadMaxCount"
+                  :on-change="handleFileChange"
+                  :on-remove="handleRemove"
+                  multiple
+                  class="cyber-upload"
+                >
+                  <el-icon><Plus /></el-icon>
+                </el-upload>
+              </el-form-item>
+
+              <!-- 费用信息 -->
+              <div class="cost-panel cyber-glass">
+                <div class="cost-header">
+                  <span class="gradient-text">费用明细</span>
+                </div>
+                <div class="cost-items">
+                  <div class="cost-item">
+                    <span>当前积分</span>
+                    <span class="value">{{ userStore.points }}</span>
+                  </div>
+                  <div class="cost-item">
+                    <span>消耗积分</span>
+                    <span class="value cost">{{ costInfo.cost }}</span>
+                  </div>
+                  <div class="cost-item">
+                    <span>剩余积分</span>
+                    <span class="value" :class="{ warning: remainingPoints < 0 }">{{ remainingPoints }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <el-button
+                type="primary"
+                size="large"
+                class="neon-btn"
+                style="width: 100%; margin-top: 20px;"
+                @click="handleGenerate"
+                :loading="generating"
+                :disabled="!canGenerate"
+              >
+                {{ generating ? '生成中...' : `开始生成 (消耗${costInfo.cost}积分)` }}
+              </el-button>
+            </el-form>
+          </el-col>
+
+          <el-col :xs="24" :sm="24" :md="14" :lg="14" class="right-panel-col">
+            <div class="result-header">
+              <span class="gradient-text">生成结果 ({{ generatedImages.length }})</span>
+              <el-button
+                v-if="generatedImages.length > 0"
+                type="success"
+                size="small"
+                class="cyber-action-btn"
+                @click="downloadAllImages"
+              >
+                一键打包下载
+              </el-button>
+            </div>
+
+            <div class="gallery-area cyber-glass-inset">
+              <el-empty v-if="generatedImages.length === 0" description="生成的图片将显示在这里" :image-size="100" />
+              <div v-else class="image-grid">
+                <div v-for="(img, index) in generatedImages" :key="index" class="img-card-wrapper cyber-border">
+                  <el-image
+                    :src="img"
+                    :preview-src-list="generatedImages"
+                    :initial-index="index"
+                    class="generated-img"
+                    :lazy="true"
+                  >
+                    <template #placeholder>
+                      <div class="image-slot">加载中...</div>
+                    </template>
+                  </el-image>
+                  <div class="hover-mask">
+                    <div class="mask-actions">
+                      <el-tooltip content="下载原图" placement="top">
+                        <el-button circle type="success" class="mask-btn" @click="downloadSingleImage(img, index)">
+                          <el-icon><Download /></el-icon>
+                        </el-button>
+                      </el-tooltip>
                     </div>
                   </div>
                 </div>
               </div>
-            </el-col>
-          </el-row>
-        </el-tab-pane>
-
-      </el-tabs>
+            </div>
+          </el-col>
+        </el-row>
+      </el-card>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, InfoFilled } from '@element-plus/icons-vue'
+import { Download, Plus } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import request from '@/api/request'
 import { generateImage } from '@/api/index'
@@ -165,41 +192,54 @@ import JSZip from 'jszip'
 
 const userStore = useUserStore()
 
-const activeTab = ref('single')
+// ========== 状态 ==========
 const models = ref([])
 const currentModel = ref(null)
+const selectedModelId = ref('')
 const generating = ref(false)
 const generatedImages = ref([])
-const pricingDescription = ref('')
+const fileList = ref([])
+const imageBase64List = ref([])
 
-const form = reactive({
-  model: '',
-  prompt: '',
-  ratio: '1:1',
-  resolution: '1024x1024',
-  count: 1
+// ========== 动态表单数据 ==========
+const dynamicFormData = reactive({})
+
+// 计算属性：UI Schema
+const uiSchema = computed(() => {
+  return currentModel.value?.config_schema?.ui_schema || []
 })
 
-const costInfo = ref({
-  cost: 0,
-  breakdown: null
+// 计算属性：是否有上传字段
+const hasUploadField = computed(() => {
+  return uiSchema.value.some(f => f.ui_type === 'upload')
 })
+
+// 计算属性：上传最大数量
+const uploadMaxCount = computed(() => {
+  const uploadField = uiSchema.value.find(f => f.ui_type === 'upload')
+  return uploadField?.max_count || 5
+})
+
+// ========== 费用计算 ==========
+const costInfo = ref({ cost: 0, breakdown: null })
 
 const canGenerate = computed(() => {
-  return form.model && form.prompt && costInfo.value.cost > 0 && !generating.value
+  const requiredFields = uiSchema.value.filter(f => f.required).map(f => f.field_name)
+  const hasAllRequired = requiredFields.every(f => dynamicFormData[f])
+  return selectedModelId.value && dynamicFormData.prompt && costInfo.value.cost > 0 && !generating.value
 })
 
 const remainingPoints = computed(() => {
   return userStore.points - costInfo.value.cost
 })
 
-// 加载模型列表
+// ========== 加载模型 ==========
 const loadModels = async () => {
   try {
     const res = await request.get('/api/models?model_type=image')
     models.value = res
     if (res.length > 0) {
-      form.model = res[0].model_id
+      selectedModelId.value = res[0].model_id
       await onModelChange()
     }
   } catch (error) {
@@ -208,27 +248,43 @@ const loadModels = async () => {
   }
 }
 
-// 模型切换
+// ========== 模型切换（含防呆逻辑）==========
 const onModelChange = async () => {
-  if (!form.model) return
+  if (!selectedModelId.value) return
 
   try {
-    const res = await request.get(`/api/models/${form.model}`)
+    const res = await request.get(`/api/models/${selectedModelId.value}`)
     currentModel.value = res
 
-    // 设置默认值
-    if (res.frontend_config?.ratios?.length) {
-      form.ratio = res.frontend_config.ratios[0]
-    }
-    if (res.frontend_config?.resolutions?.length) {
-      const firstRes = res.frontend_config.resolutions[0]
-      form.resolution = firstRes.value || firstRes
+    // 确保 config_schema 存在
+    if (typeof res.config_schema === 'string') {
+      try {
+        res.config_schema = JSON.parse(res.config_schema)
+      } catch {}
     }
 
-    // 获取费用说明
-    if (res.pricing_description) {
-      pricingDescription.value = res.pricing_description
-    }
+    const schema = res.config_schema?.ui_schema || []
+
+    // ===== 防呆逻辑 =====
+    schema.forEach(field => {
+      const oldValue = dynamicFormData[field.field_name]
+
+      if (field.ui_type === 'select' && field.options) {
+        const validValues = field.options.map(o => o.value)
+        if (oldValue === undefined || !validValues.includes(oldValue)) {
+          dynamicFormData[field.field_name] = field.default_value ?? validValues[0]
+        }
+      } else if (field.ui_type === 'input-number') {
+        const num = Number(oldValue)
+        if (isNaN(num) || num < (field.min || 1) || num > (field.max || 10)) {
+          dynamicFormData[field.field_name] = field.default_value ?? field.min ?? 1
+        }
+      } else {
+        if (oldValue === undefined) {
+          dynamicFormData[field.field_name] = field.default_value ?? ''
+        }
+      }
+    })
 
     await calculateCost()
   } catch (error) {
@@ -236,27 +292,51 @@ const onModelChange = async () => {
   }
 }
 
-// 计算费用
+// ========== 费用计算 ==========
 const calculateCost = async () => {
-  if (!form.model) return
+  if (!selectedModelId.value) return
 
   try {
     const res = await request.post('/api/calculate-cost', {
-      model_id: form.model,
-      resolution: form.resolution,
-      ratio: form.ratio,
-      count: form.count
+      model_id: selectedModelId.value,
+      resolution: dynamicFormData.resolution,
+      ratio: dynamicFormData.aspect_ratio || dynamicFormData.ratio,
+      count: dynamicFormData.num_images || dynamicFormData.count || 1
     })
     costInfo.value = res
-    if (res.description) {
-      pricingDescription.value = res.description
-    }
   } catch (error) {
     console.error('计算费用失败:', error)
+    // 使用 config_schema 中的计费规则
+    const pricingRules = currentModel.value?.config_schema?.pricing_rules
+    if (pricingRules?.mode === 'fixed') {
+      costInfo.value = { cost: pricingRules.fixed_cost || 2 }
+    }
   }
 }
 
-// 开始生成
+// ========== 文件处理 ==========
+const handleFileChange = (uploadFile, uploadFiles) => {
+  fileList.value = uploadFiles
+  convertImagesToBase64()
+}
+
+const handleRemove = (file, uploadFiles) => {
+  fileList.value = uploadFiles
+  convertImagesToBase64()
+}
+
+const convertImagesToBase64 = () => {
+  imageBase64List.value = []
+  fileList.value.forEach(file => {
+    const reader = new FileReader()
+    reader.readAsDataURL(file.raw)
+    reader.onload = () => {
+      imageBase64List.value.push(reader.result)
+    }
+  })
+}
+
+// ========== 开始生成 ==========
 const handleGenerate = async () => {
   if (userStore.points < costInfo.value.cost) {
     ElMessage.warning('积分不足，请充值')
@@ -265,7 +345,7 @@ const handleGenerate = async () => {
 
   try {
     await ElMessageBox.confirm(
-      `即将消耗 ${costInfo.value.cost} 积分生成 ${form.count} 张图片，确认继续？`,
+      `即将消耗 ${costInfo.value.cost} 积分生成图片，确认继续？`,
       '费用确认',
       { confirmButtonText: '确认', cancelButtonText: '取消' }
     )
@@ -277,30 +357,48 @@ const handleGenerate = async () => {
   let deductionId = null
 
   try {
-    // 1. 预扣积分
+    // 预扣积分
     const reserveRes = await request.post('/api/points/reserve', {
       amount: costInfo.value.cost,
-      model_id: form.model
+      model_id: selectedModelId.value
     })
     deductionId = reserveRes.deduction_id
 
-    // 2. 调用图片生成 API（使用占位符模式）
+    // 调用图片生成 API
     ElMessage.info('正在生成图片，请稍候...')
-    const imageRes = await generateImage({
-      model: form.model,
-      prompt: form.prompt,
-      size: form.resolution,
-      images: []
+
+    const requestData = {
+      model: selectedModelId.value,
+      prompt: dynamicFormData.prompt,
+      size: dynamicFormData.resolution || dynamicFormData.size,
+      images: imageBase64List.value
+    }
+
+    // 添加动态参数
+    const requestMapping = currentModel.value?.config_schema?.request_mapping?.dynamic_params || {}
+    Object.keys(requestMapping).forEach(key => {
+      if (dynamicFormData[key] !== undefined) {
+        const targetKey = requestMapping[key]
+        if (targetKey !== key) {
+          requestData[targetKey] = dynamicFormData[key]
+        }
+      }
     })
 
-    // 3. 确认扣费
+    const imageRes = await generateImage(requestData)
+
+    // 确认扣费
     await request.post('/api/points/confirm', { deduction_id: deductionId })
 
-    // 4. 刷新积分
+    // 刷新积分
     userStore.refreshPoints()
 
-    // 5. 显示结果
-    const images = imageRes.images || imageRes.data?.map(d => d.url) || []
+    // 解析结果 - 使用 response_mapping
+    const responseMapping = currentModel.value?.config_schema?.response_mapping || {}
+    const resultUrlPath = responseMapping.result_url_path || 'data[0].url'
+
+    const images = imageRes.images || [getJsonValue(imageRes, resultUrlPath)].filter(Boolean) ||
+                   imageRes.data?.map(d => d.url) || []
     generatedImages.value = [...images, ...generatedImages.value]
 
     ElMessage.success(`成功生成 ${images.length} 张图片`)
@@ -321,13 +419,32 @@ const handleGenerate = async () => {
   }
 }
 
-// 下载单张图片
+// ========== JSON Path 解析 ==========
+const getJsonValue = (obj, path) => {
+  if (!path || !obj) return null
+  const keys = path.split('.')
+  let value = obj
+
+  for (const key of keys) {
+    const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
+    if (arrayMatch) {
+      const [, arrKey, index] = arrayMatch
+      value = value?.[arrKey]?.[parseInt(index)]
+    } else {
+      value = value?.[key]
+    }
+    if (value === undefined) return null
+  }
+
+  return value
+}
+
+// ========== 下载功能 ==========
 const downloadSingleImage = (url, suffix) => {
   const fileName = `Image_${Date.now()}_${suffix}.png`
   saveAs(url, fileName)
 }
 
-// 打包下载所有图片
 const downloadAllImages = async () => {
   if (generatedImages.value.length === 0) return
 
@@ -360,44 +477,17 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.image-tool {
-  padding: 0px;
-}
+.image-tool { padding: 0px; }
 
-/* 1. 赛博 Tabs 容器 */
-.cyber-tabs {
+.cyber-glass {
   background: rgba(0, 0, 0, 0.4) !important;
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 12px !important;
-  overflow: hidden;
+  border-radius: 12px;
+  color: #fff;
   box-shadow: none !important;
 }
 
-:deep(.el-tabs__header) {
-  background: rgba(0, 0, 0, 0.3) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-  margin-bottom: 20px;
-}
-
-:deep(.el-tabs__item) {
-  color: #a0aec0 !important;
-  font-weight: 700;
-  border-right: 1px solid rgba(255, 255, 255, 0.05) !important;
-  border-left: none !important;
-}
-
-:deep(.el-tabs__item.is-active) {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #00f260 !important;
-  border-bottom: none !important;
-}
-
-:deep(.el-tabs__content) {
-  padding: 20px !important;
-}
-
-/* 2. 核心修复：输入框去灰 & 去双层 */
 :deep(.el-input__wrapper),
 :deep(.el-textarea__inner),
 :deep(.el-input-number__decrease),
@@ -415,7 +505,6 @@ onMounted(() => {
   box-shadow: 0 0 8px rgba(5, 117, 230, 0.5) !important;
 }
 
-/* 3. 其他控件 */
 :deep(.el-select__wrapper) {
   background-color: rgba(0, 0, 0, 0.3) !important;
   box-shadow: none !important;
@@ -423,15 +512,16 @@ onMounted(() => {
   border-radius: 8px !important;
 }
 
-:deep(.el-select__selected-item) {
-  color: #fff !important;
-}
+:deep(.el-select__selected-item) { color: #fff !important; }
+:deep(.el-form-item__label) { color: #a0aec0 !important; }
 
-:deep(.el-form-item__label) {
+:deep(.el-upload--picture-card) {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  border: 1px dashed rgba(255, 255, 255, 0.3) !important;
   color: #a0aec0 !important;
+  border-radius: 8px !important;
 }
 
-/* 4. 按钮 & 文本 */
 .neon-btn {
   background: linear-gradient(90deg, #7f00ff, #e100ff) !important;
   border: none !important;
@@ -439,37 +529,13 @@ onMounted(() => {
   color: #fff;
 }
 
-.neon-btn:hover {
-  opacity: 0.9;
-}
-
-.neon-btn:disabled {
-  opacity: 0.5;
-}
+.neon-btn:hover { opacity: 0.9; }
+.neon-btn:disabled { opacity: 0.5; }
 
 .cyber-action-btn {
   background: rgba(0, 242, 96, 0.1) !important;
   border: 1px solid #00f260 !important;
   color: #00f260 !important;
-}
-
-.mask-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-.mask-btn:hover {
-  background: #00f260;
-  border-color: #00f260;
-  color: #000;
-}
-
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
 }
 
 .gradient-text {
@@ -480,7 +546,13 @@ onMounted(() => {
   color: transparent;
 }
 
-/* 5. 结果区 */
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .gallery-area {
   background: rgba(0, 0, 0, 0.2);
   border-radius: 12px;
@@ -488,9 +560,7 @@ onMounted(() => {
   min-height: 400px;
 }
 
-:deep(.el-empty__description p) {
-  color: #718096 !important;
-}
+:deep(.el-empty__description p) { color: #718096 !important; }
 
 .image-grid {
   display: grid;
@@ -528,13 +598,19 @@ onMounted(() => {
   z-index: 10;
 }
 
-.img-card-wrapper:hover .hover-mask {
-  opacity: 1;
+.img-card-wrapper:hover .hover-mask { opacity: 1; }
+.mask-actions { display: flex; gap: 10px; }
+
+.mask-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
-.mask-actions {
-  display: flex;
-  gap: 10px;
+.mask-btn:hover {
+  background: #00f260;
+  border-color: #00f260;
+  color: #000;
 }
 
 .image-slot {
@@ -548,7 +624,6 @@ onMounted(() => {
   font-size: 12px;
 }
 
-/* 6. 费用面板 */
 .cost-panel {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -557,15 +632,8 @@ onMounted(() => {
   margin-top: 20px;
 }
 
-.cost-header {
-  margin-bottom: 10px;
-}
-
-.cost-items {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.cost-header { margin-bottom: 10px; }
+.cost-items { display: flex; flex-direction: column; gap: 8px; }
 
 .cost-item {
   display: flex;
@@ -575,9 +643,7 @@ onMounted(() => {
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.cost-item:last-child {
-  border-bottom: none;
-}
+.cost-item:last-child { border-bottom: none; }
 
 .cost-item .value {
   font-weight: bold;
@@ -585,41 +651,15 @@ onMounted(() => {
   color: #fff;
 }
 
-.cost-item .value.cost {
-  color: #00f260;
-}
+.cost-item .value.cost { color: #00f260; }
+.cost-item .value.warning { color: #ff4757; }
 
-.cost-item .value.warning {
-  color: #ff4757;
-}
-
-.pricing-desc {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px;
-  background: rgba(5, 117, 230, 0.1);
-  border-radius: 8px;
-  font-size: 12px;
-  color: #a0aec0;
-}
-
-.pricing-desc .el-icon {
-  color: #0575e6;
-  margin-top: 2px;
-}
-
-/* 7. 响应式布局间距 */
 @media screen and (max-width: 768px) {
-  .right-panel-col {
-    margin-top: 20px;
-  }
+  .right-panel-col { margin-top: 20px; }
 }
 </style>
 
 <style>
-/* 全局 Popper 样式 */
 .cyber-popper.el-popper {
   background: rgba(0, 0, 0, 0.4) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -627,23 +667,11 @@ onMounted(() => {
   color: #fff !important;
 }
 
-.cyber-popper .el-select-dropdown__item {
-  color: #a0aec0 !important;
-}
-
+.cyber-popper .el-select-dropdown__item { color: #a0aec0 !important; }
 .cyber-popper .el-select-dropdown__item.is-hovering,
 .cyber-popper .el-select-dropdown__item:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   color: #fff !important;
 }
-
-.cyber-popper .el-select-dropdown__item.is-selected {
-  color: #00f260 !important;
-  font-weight: bold;
-}
-
-.cyber-popper .el-popper__arrow::before {
-  background: rgba(0, 0, 0, 0.4) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-}
+.cyber-popper .el-select-dropdown__item.is-selected { color: #00f260 !important; font-weight: bold; }
 </style>

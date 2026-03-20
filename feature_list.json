@@ -277,7 +277,7 @@
       "实现模型切换防呆逻辑",
       "重构轮询解析逻辑 (response_mapping)"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "id": 24,
