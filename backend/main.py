@@ -493,6 +493,142 @@ async def admin_recharge(
     return {"status": "success", "new_balance": user.points}
 
 
+# ============ 内容管理接口（管理员） ============
+@app.get("/admin/content/categories", response_model=List[schemas.ContentCategoryResponse])
+async def admin_get_categories(
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员获取所有内容分类"""
+    return crud.get_all_categories(db)
+
+
+@app.post("/admin/content/categories", response_model=schemas.ContentCategoryResponse)
+async def admin_create_category(
+    data: schemas.ContentCategoryCreate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员创建内容分类"""
+    return crud.create_category(db, data.model_dump())
+
+
+@app.put("/admin/content/categories/{pk}", response_model=schemas.ContentCategoryResponse)
+async def admin_update_category(
+    pk: int,
+    data: schemas.ContentCategoryUpdate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员更新内容分类"""
+    result = crud.update_category(db, pk, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="分类不存在")
+    return result
+
+
+@app.delete("/admin/content/categories/{pk}")
+async def admin_delete_category(
+    pk: int,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员删除内容分类"""
+    if not crud.delete_category(db, pk):
+        raise HTTPException(status_code=404, detail="分类不存在")
+    return {"status": "success", "message": "分类已删除"}
+
+
+@app.post("/admin/content/categories/{category_id}/items", response_model=schemas.ContentItemResponse)
+async def admin_create_item(
+    category_id: int,
+    data: schemas.ContentItemCreate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员创建内容项"""
+    return crud.create_item(db, category_id, data.model_dump())
+
+
+@app.put("/admin/content/items/{pk}", response_model=schemas.ContentItemResponse)
+async def admin_update_item(
+    pk: int,
+    data: schemas.ContentItemUpdate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员更新内容项"""
+    result = crud.update_item(db, pk, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="内容项不存在")
+    return result
+
+
+@app.delete("/admin/content/items/{pk}")
+async def admin_delete_item(
+    pk: int,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员删除内容项"""
+    if not crud.delete_item(db, pk):
+        raise HTTPException(status_code=404, detail="内容项不存在")
+    return {"status": "success", "message": "内容项已删除"}
+
+
+@app.post("/admin/content/items/{item_id}/cards", response_model=schemas.ContentCardResponse)
+async def admin_create_card(
+    item_id: int,
+    data: schemas.ContentCardCreate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员创建内容卡片"""
+    return crud.create_card(db, item_id, data.model_dump())
+
+
+@app.put("/admin/content/cards/{pk}", response_model=schemas.ContentCardResponse)
+async def admin_update_card(
+    pk: int,
+    data: schemas.ContentCardUpdate,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员更新内容卡片"""
+    result = crud.update_card(db, pk, data.model_dump(exclude_unset=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="内容卡片不存在")
+    return result
+
+
+@app.delete("/admin/content/cards/{pk}")
+async def admin_delete_card(
+    pk: int,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员删除内容卡片"""
+    if not crud.delete_card(db, pk):
+        raise HTTPException(status_code=404, detail="内容卡片不存在")
+    return {"status": "success", "message": "内容卡片已删除"}
+
+
+# ============ 内容接口（用户端） ============
+@app.get("/api/content/{route_path:path}", response_model=List[schemas.ContentCardSimple])
+async def get_content(
+    route_path: str,
+    db: Session = Depends(get_db)
+):
+    """用户端获取页面内容"""
+    # route_path 格式如 "shrimp/openclaw"
+    item = crud.get_content_by_route(db, f"/{route_path}")
+    if not item:
+        return []
+
+    cards = crud.get_cards_by_item(db, item.id, enabled_only=True)
+    return cards
+
+
 # ============ 启动入口 ============
 if __name__ == "__main__":
     import uvicorn

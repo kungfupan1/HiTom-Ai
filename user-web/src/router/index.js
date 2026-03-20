@@ -79,7 +79,7 @@ const routes = [
       {
         path: 'shrimp/openclaw',
         name: 'ShrimpOpenClaw',
-        component: () => import('@/views/service/ComingSoon.vue'),
+        component: () => import('@/views/shrimp/OpenClawDeploy.vue'),
         meta: { title: 'OpenClaw部署' }
       },
       {

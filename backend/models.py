@@ -130,3 +130,60 @@ class PointReserve(Base):
     status = Column(String(20), default="reserved")  # reserved/confirmed/refunded
     expire_time = Column(DateTime)  # 过期时间（超时自动退还）
     create_time = Column(DateTime, default=datetime.now)
+
+
+class ContentCategory(Base):
+    """内容分类表（大类）"""
+    __tablename__ = "content_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category_key = Column(String(50), unique=True, nullable=False)  # 如 'shrimp', 'service'
+    category_name = Column(String(100), nullable=False)  # 如 '云端养虾', '跨境服务资源'
+    icon = Column(String(50))  # 图标
+    sort_order = Column(Integer, default=0)
+    is_enabled = Column(Boolean, default=True)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # 关联内容项
+    items = relationship("ContentItem", back_populates="category", cascade="all, delete-orphan")
+
+
+class ContentItem(Base):
+    """内容项表（栏目）"""
+    __tablename__ = "content_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category_id = Column(Integer, ForeignKey("content_categories.id"), nullable=False)
+    item_key = Column(String(50), nullable=False)  # 如 'openclaw', 'skills'
+    item_name = Column(String(100), nullable=False)  # 如 'OpenClaw部署'
+    icon = Column(String(50))
+    route_path = Column(String(100))  # 前端路由路径
+    sort_order = Column(Integer, default=0)
+    is_enabled = Column(Boolean, default=True)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # 关联具体内容卡片
+    cards = relationship("ContentCard", back_populates="item", cascade="all, delete-orphan")
+
+    category = relationship("ContentCategory", back_populates="items")
+
+
+class ContentCard(Base):
+    """内容卡片表（具体服务/产品）"""
+    __tablename__ = "content_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, ForeignKey("content_items.id"), nullable=False)
+    title = Column(String(200), nullable=False)  # 如 'OpenClaw', 'QClaw'
+    description = Column(Text)  # 简介
+    icon = Column(String(100))  # 图标/emoji
+    contact_info = Column(Text)  # 联系方式（如微信号）
+    extra_data = Column(JSON)  # 扩展数据（价格、标签等）
+    sort_order = Column(Integer, default=0)
+    is_enabled = Column(Boolean, default=True)
+    create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    item = relationship("ContentItem", back_populates="cards")
