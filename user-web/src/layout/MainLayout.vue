@@ -145,7 +145,7 @@ const autoCollapsedLog = ref(false)
 const autoCollapsedSidebar = ref(false)
 
 // 响应式断点
-const LOG_COLLAPSE_WIDTH = 1100  // 收起日志栏
+const LOG_COLLAPSE_WIDTH = 1400  // 收起日志栏
 const SIDEBAR_COLLAPSE_WIDTH = 800  // 收起侧边栏
 const MIN_WIDTH = 600  // 最小宽度
 
