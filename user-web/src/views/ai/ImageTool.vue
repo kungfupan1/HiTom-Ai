@@ -201,7 +201,9 @@
           </el-row>
         </el-tab-pane>
       </el-tabs>
-    </div>
+
+    <!-- 历史记录面板 -->
+    <HistoryPanel ref="historyPanelRef" default-type="image" style="margin-top: 16px;" />
   </div>
 </template>
 
@@ -213,9 +215,13 @@ import { Plus, ZoomIn, Edit, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
+import HistoryPanel from '@/components/HistoryPanel.vue'
 
 const emit = defineEmits(['refresh-points', 'log'])
 const activeTab = ref('single')
+
+// ========== 历史记录面板 ref ==========
+const historyPanelRef = ref(null)
 
 // --- 单任务变量 ---
 const loading = ref(false)
@@ -503,6 +509,9 @@ const generateImage = async () => {
         emit('refresh-points')
         emit('log', `第 ${i+1} 张生成成功！`)
         successCount++
+
+        // 保存历史记录
+        saveImageHistory(url, currentPrompt)
       } else {
         ElMessage.error(`第 ${i+1} 张失败`)
         emit('log', `第 ${i+1} 张服务端拒绝: ${JSON.stringify(res)}`)
@@ -520,6 +529,31 @@ const generateImage = async () => {
   if (successCount > 0) {
     ElMessage.success(`任务结束，成功 ${successCount} 张`)
     emit('log', `任务全部结束`)
+  }
+}
+
+// ========== 保存历史记录 ==========
+const saveImageHistory = async (resultUrl, prompt) => {
+  try {
+    await request.post('/api/history', {
+      task_type: 'image',
+      model_id: 'nano-banana-2',
+      status: 'success',
+      prompt_summary: prompt?.substring(0, 200) || '',
+      params_json: {
+        aspect_ratio: form.aspect_ratio,
+        resolution: form.resolution
+      },
+      result_url: resultUrl,
+      cost_points: 2 // 图片固定 2 积分
+    })
+
+    // 刷新历史记录面板
+    if (historyPanelRef.value) {
+      historyPanelRef.value.refresh()
+    }
+  } catch (e) {
+    console.error('保存历史记录失败', e)
   }
 }
 

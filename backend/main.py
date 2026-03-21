@@ -660,6 +660,120 @@ async def admin_get_operation_logs(
     }
 
 
+# ============ 生成历史记录接口 ============
+class CreateHistoryRequest(BaseModel):
+    """创建历史记录请求"""
+    task_type: str
+    model_id: Optional[str] = None
+    task_id: Optional[str] = None
+    status: str = "success"
+    prompt_summary: Optional[str] = None
+    params_json: Optional[Dict[str, Any]] = None
+    result_url: Optional[str] = None
+    cost_points: int = 0
+
+
+@app.post("/api/history")
+async def create_history(
+    request: CreateHistoryRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """创建生成历史记录"""
+    history = crud.create_generation_history(
+        db,
+        user_id=current_user.id,
+        task_type=request.task_type,
+        model_id=request.model_id,
+        task_id=request.task_id,
+        status=request.status,
+        prompt_summary=request.prompt_summary,
+        params_json=request.params_json,
+        result_url=request.result_url,
+        cost_points=request.cost_points
+    )
+    return {
+        "status": "success",
+        "id": history.id,
+        "message": "历史记录已保存"
+    }
+
+
+@app.get("/api/history")
+async def get_history(
+    task_type: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 10,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取当前用户的生成历史记录"""
+    histories, total = crud.get_generation_history(
+        db,
+        user_id=current_user.id,
+        task_type=task_type,
+        page=page,
+        page_size=page_size
+    )
+
+    return {
+        "items": [
+            {
+                "id": h.id,
+                "task_type": h.task_type,
+                "model_id": h.model_id,
+                "prompt_summary": h.prompt_summary,
+                "params_json": h.params_json,
+                "result_url": h.result_url,
+                "cost_points": h.cost_points,
+                "create_time": h.create_time.isoformat() if h.create_time else None
+            }
+            for h in histories
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": (total + page_size - 1) // page_size
+    }
+
+
+@app.get("/api/history/{history_id}")
+async def get_history_detail(
+    history_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取单条历史记录详情"""
+    history = crud.get_generation_history_by_id(db, history_id, current_user.id)
+    if not history:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    return {
+        "id": history.id,
+        "task_type": history.task_type,
+        "model_id": history.model_id,
+        "task_id": history.task_id,
+        "status": history.status,
+        "prompt_summary": history.prompt_summary,
+        "params_json": history.params_json,
+        "result_url": history.result_url,
+        "cost_points": history.cost_points,
+        "create_time": history.create_time.isoformat() if history.create_time else None
+    }
+
+
+@app.delete("/api/history/{history_id}")
+async def delete_history(
+    history_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """删除历史记录"""
+    if not crud.delete_generation_history(db, history_id, current_user.id):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return {"status": "success", "message": "记录已删除"}
+
+
 # ============ 内容配置接口（管理员） ============
 @app.get("/admin/content-configs")
 async def admin_get_content_configs(

@@ -159,6 +159,9 @@
             </div>
           </div>
         </el-card>
+
+        <!-- 历史记录面板 -->
+        <HistoryPanel ref="historyPanelRef" default-type="video" />
       </el-col>
     </el-row>
   </div>
@@ -171,9 +174,13 @@ import request from '@/api/request'
 import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import HistoryPanel from '@/components/HistoryPanel.vue'
 
 const emit = defineEmits(['refresh-points', 'log'])
 const userStore = useUserStore()
+
+// ========== 历史记录面板 ref ==========
+const historyPanelRef = ref(null)
 
 // ========== 状态 ==========
 const loading = ref(false)
@@ -496,6 +503,9 @@ const startStatusPolling = () => {
         taskStatus.value = 'success'
         loading.value = false
         ElMessage.success('视频生成完成！')
+
+        // 保存生成历史记录
+        saveHistory(videoUrl.value)
       }
       else if (statusMapping.failed?.some(s => rawStatus.includes(s)) || (errMsg && errMsg !== '未知错误' && errMsg.includes('失败'))) {
         clearInterval(statusTimer)
@@ -572,6 +582,39 @@ const stopStatusPolling = () => {
 // ========== 辅助函数 ==========
 const formatDescription = (text) => {
   return text?.replace(/\n/g, '<br>') || ''
+}
+
+// ========== 保存历史记录 ==========
+const saveHistory = async (resultUrl) => {
+  try {
+    // 构建 prompt 摘要
+    const promptSummary = `产品: ${dynamicFormData.product_type || ''}\n卖点: ${dynamicFormData.selling_points?.substring(0, 100) || ''}`
+
+    await request.post('/api/history', {
+      task_type: 'video',
+      model_id: selectedModelId.value,
+      task_id: taskId.value,
+      status: 'success',
+      prompt_summary: promptSummary,
+      params_json: {
+        duration: dynamicFormData.duration,
+        resolution: dynamicFormData.resolution,
+        aspect_ratio: dynamicFormData.aspect_ratio
+      },
+      result_url: resultUrl,
+      cost_points: costInfo.value.cost
+    })
+
+    // 刷新历史记录面板
+    if (historyPanelRef.value) {
+      historyPanelRef.value.refresh()
+    }
+
+    emit('log', '历史记录已保存')
+  } catch (e) {
+    console.error('保存历史记录失败', e)
+    // 不影响用户体验，静默失败
+  }
 }
 
 // ========== 生命周期 ==========

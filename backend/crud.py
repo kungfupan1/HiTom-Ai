@@ -9,7 +9,7 @@ import uuid
 import json
 
 from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog
-from models import ContentConfig, OperationLog
+from models import ContentConfig, OperationLog, GenerationHistory
 from engines.pricing_engine import pricing_engine
 
 
@@ -466,3 +466,128 @@ def get_operation_logs(
     logs = query.order_by(OperationLog.create_time.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
     return logs, total
+
+
+# ============ 生成历史记录相关 ============
+def create_generation_history(
+    db: Session,
+    user_id: int,
+    task_type: str,
+    model_id: str = None,
+    task_id: str = None,
+    status: str = "success",
+    prompt_summary: str = None,
+    params_json: Dict[str, Any] = None,
+    result_url: str = None,
+    cost_points: int = 0
+) -> GenerationHistory:
+    """
+    创建生成历史记录
+
+    Args:
+        user_id: 用户ID
+        task_type: 任务类型 (video, image, text)
+        model_id: 模型ID
+        task_id: AI服务任务ID
+        status: 状态 (success, failed)
+        prompt_summary: 提示词摘要
+        params_json: 完整参数
+        result_url: 结果URL
+        cost_points: 消耗积分
+
+    Returns:
+        GenerationHistory 记录
+    """
+    # 截断 prompt_summary 到 500 字符
+    if prompt_summary and len(prompt_summary) > 500:
+        prompt_summary = prompt_summary[:500]
+
+    history = GenerationHistory(
+        user_id=user_id,
+        task_type=task_type,
+        model_id=model_id,
+        task_id=task_id,
+        status=status,
+        prompt_summary=prompt_summary,
+        params_json=params_json,
+        result_url=result_url,
+        cost_points=cost_points
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    return history
+
+
+def get_generation_history(
+    db: Session,
+    user_id: int,
+    task_type: str = None,
+    page: int = 1,
+    page_size: int = 10
+) -> tuple:
+    """
+    获取用户的生成历史记录
+
+    Args:
+        user_id: 用户ID
+        task_type: 任务类型筛选 (video, image, text)，不传则查全部
+        page: 页码
+        page_size: 每页数量
+
+    Returns:
+        (histories, total)
+    """
+    query = db.query(GenerationHistory).filter(
+        GenerationHistory.user_id == user_id,
+        GenerationHistory.status == "success"  # 只返回成功的记录
+    )
+
+    if task_type:
+        query = query.filter(GenerationHistory.task_type == task_type)
+
+    total = query.count()
+    histories = query.order_by(GenerationHistory.create_time.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    return histories, total
+
+
+def get_generation_history_by_id(db: Session, history_id: int, user_id: int = None) -> Optional[GenerationHistory]:
+    """
+    获取单条历史记录
+
+    Args:
+        history_id: 记录ID
+        user_id: 用户ID（用于权限校验）
+
+    Returns:
+        GenerationHistory 或 None
+    """
+    query = db.query(GenerationHistory).filter(GenerationHistory.id == history_id)
+    if user_id:
+        query = query.filter(GenerationHistory.user_id == user_id)
+    return query.first()
+
+
+def delete_generation_history(db: Session, history_id: int, user_id: int) -> bool:
+    """
+    删除历史记录
+
+    Args:
+        history_id: 记录ID
+        user_id: 用户ID（用于权限校验）
+
+    Returns:
+        是否删除成功
+    """
+    history = db.query(GenerationHistory).filter(
+        GenerationHistory.id == history_id,
+        GenerationHistory.user_id == user_id
+    ).first()
+
+    if not history:
+        return False
+
+    db.delete(history)
+    db.commit()
+    return True

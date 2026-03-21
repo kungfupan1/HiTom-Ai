@@ -153,3 +153,30 @@ class OperationLog(Base):
     ip_address = Column(String(50))
     user_agent = Column(String(255))
     create_time = Column(DateTime, default=datetime.now)
+
+
+class GenerationHistory(Base):
+    """生成历史记录表 - 记录用户的图片/视频生成历史"""
+    __tablename__ = "generation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+
+    # 任务类型
+    task_type = Column(String(20), nullable=False)  # video, image, text
+    model_id = Column(String(50))  # 使用的模型
+
+    # 任务信息
+    task_id = Column(String(100))  # AI 服务商返回的 task_id
+    status = Column(String(20), default="success")  # success, failed
+
+    # 生成参数摘要
+    prompt_summary = Column(String(500))  # 提示词摘要（截断）
+    params_json = Column(JSON)  # 完整参数（duration, resolution, ratio 等）
+
+    # 结果
+    result_url = Column(Text)  # 生成结果 URL
+    cost_points = Column(Integer, default=0)  # 消耗积分
+
+    # 时间
+    create_time = Column(DateTime, default=datetime.now)
