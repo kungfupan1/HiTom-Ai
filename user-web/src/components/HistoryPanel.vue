@@ -32,6 +32,11 @@
             class="history-card"
             :style="{ '--delay': index * 0.05 + 's' }"
           >
+            <!-- 删除按钮 - 右上角圆形叉 -->
+            <div class="delete-btn" @click.stop="confirmDelete(item)">
+              <el-icon><Close /></el-icon>
+            </div>
+
             <!-- 左侧预览区域 -->
             <div
               class="preview-area"
@@ -114,17 +119,7 @@
                 </div>
               </div>
 
-              <div class="info-footer">
-                <el-button
-                  type="danger"
-                  size="small"
-                  text
-                  @click="confirmDelete(item)"
-                >
-                  删除
-                </el-button>
               </div>
-            </div>
           </div>
         </div>
 
@@ -147,7 +142,7 @@
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import { ArrowDown, Loading, Download, WarningFilled } from '@element-plus/icons-vue'
+import { ArrowDown, Loading, Download, WarningFilled, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
 
@@ -434,6 +429,36 @@ onMounted(() => {
   animation-delay: var(--delay, 0s);
   opacity: 0;
   transform: translateY(-20px);
+  position: relative;
+}
+
+/* 右上角删除按钮 */
+.delete-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 80, 80, 0.2);
+  border: 1px solid rgba(255, 80, 80, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  z-index: 10;
+}
+
+.delete-btn:hover {
+  background: rgba(255, 80, 80, 0.5);
+  border-color: rgba(255, 80, 80, 0.8);
+  transform: scale(1.1);
+}
+
+.delete-btn .el-icon {
+  font-size: 14px;
+  color: #ff6464;
 }
 
 @keyframes cardSlideIn {
@@ -445,9 +470,9 @@ onMounted(() => {
 
 /* 左侧预览区域 */
 .preview-area {
-  width: 100px;
-  height: 100px;
-  min-width: 100px;
+  width: 150px;
+  height: 150px;
+  min-width: 150px;
   background: rgba(0, 0, 0, 0.5);
   border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 8px;
@@ -571,14 +596,6 @@ onMounted(() => {
   color: #a0aec0;
 }
 
-.info-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
 .pagination-wrapper {
   margin-top: 20px;
   display: flex;
@@ -604,7 +621,8 @@ onMounted(() => {
 
 /* 图片预览遮罩层适配 */
 :deep(.el-image-viewer__wrapper) {
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 9999 !important;
 }
 
 :deep(.el-image-viewer__close) {
