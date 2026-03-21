@@ -297,7 +297,8 @@ defineExpose({
 })
 
 onMounted(() => {
-  // 默认不加载，等展开时再加载
+  // 挂载时加载一次，获取正确的记录总数
+  loadHistory()
 })
 </script>
 
