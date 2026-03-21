@@ -1,7 +1,7 @@
 <template>
   <div class="image-tool">
     <el-row :gutter="20">
-      <el-col :xs="24" :sm="24" :md="10" :lg="10">
+      <el-col :xs="24" :sm="24" :md="11" :lg="11">
         <el-card class="cyber-glass" shadow="never">
           <template #header>
             <div class="card-header">
@@ -109,7 +109,7 @@
         </el-card>
       </el-col>
 
-      <el-col :xs="24" :sm="24" :md="14" :lg="14" class="right-panel-col">
+      <el-col :xs="24" :sm="24" :md="13" :lg="13" class="right-panel-col">
         <el-card class="cyber-glass" shadow="never">
           <template #header>
             <div class="card-header">
