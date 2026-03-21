@@ -719,6 +719,12 @@ onUnmounted(() => {
   border-radius: 8px !important;
 }
 
+/* 删除按钮样式 */
+:deep(.el-upload-list__item-delete),
+:deep(.el-upload-list__item-status-label) {
+  background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
 /* 4. 按钮 & 文本 */
 .gradient-text { font-size: 18px; font-weight: 800; background: linear-gradient(90deg, #00f260, #0575e6); -webkit-background-clip: text; color: transparent; text-shadow: 0 0 10px rgba(5, 117, 230, 0.3); }
 .label-box { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; }
