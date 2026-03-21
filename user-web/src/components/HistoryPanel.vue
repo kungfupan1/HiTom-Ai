@@ -16,7 +16,7 @@
     <!-- 展开内容 -->
     <transition name="expand">
       <div v-show="expanded" class="history-content">
-        <div v-if="loading" class="loading-state">
+        <div v-if="loading && historyList.length === 0" class="loading-state">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载中...</span>
         </div>
@@ -32,57 +32,98 @@
             class="history-card"
             :style="{ '--delay': index * 0.05 + 's' }"
           >
-            <div class="card-header">
-              <el-tag
-                :type="getTagType(item.task_type)"
-                size="small"
-                effect="dark"
-                round
-              >
-                {{ getTagLabel(item.task_type) }}
-              </el-tag>
-              <span class="card-time">{{ formatTime(item.create_time) }}</span>
+            <!-- 左侧预览区域 -->
+            <div
+              class="preview-area"
+              :class="{
+                'preview-success': item.previewStatus === 'success',
+                'preview-failed': item.previewStatus === 'failed'
+              }"
+              @click="handlePreviewClick(item)"
+            >
+              <!-- 初始状态：点击下载 -->
+              <template v-if="!item.previewStatus || item.previewStatus === 'initial'">
+                <el-icon class="preview-icon"><Download /></el-icon>
+                <span class="preview-text">点击下载</span>
+              </template>
+
+              <!-- 加载中 -->
+              <template v-else-if="item.previewStatus === 'loading'">
+                <el-icon class="is-loading preview-icon"><Loading /></el-icon>
+                <span class="preview-text">加载中</span>
+              </template>
+
+              <!-- 加载失败/已清理 -->
+              <template v-else-if="item.previewStatus === 'failed'">
+                <el-icon class="preview-icon failed-icon"><WarningFilled /></el-icon>
+                <span class="preview-text failed-text">已清理</span>
+                <span class="retry-hint">点击重试</span>
+              </template>
+
+              <!-- 加载成功 -->
+              <template v-else-if="item.previewStatus === 'success'">
+                <!-- 图片预览 -->
+                <el-image
+                  v-if="item.task_type === 'image'"
+                  :src="item.previewUrl"
+                  fit="cover"
+                  class="preview-image"
+                  :preview-src-list="[item.previewUrl]"
+                />
+                <!-- 视频预览 -->
+                <video
+                  v-else-if="item.task_type === 'video'"
+                  :src="item.previewUrl"
+                  class="preview-video"
+                  preload="metadata"
+                  @click.stop
+                  controls
+                  muted
+                />
+              </template>
             </div>
 
-            <div class="card-body">
-              <div class="card-info">
+            <!-- 右侧信息区域 -->
+            <div class="info-area">
+              <div class="info-header">
+                <el-tag
+                  :type="getTagType(item.task_type)"
+                  size="small"
+                  effect="dark"
+                  round
+                >
+                  {{ getTagLabel(item.task_type) }}
+                </el-tag>
+                <span class="card-time">{{ formatTime(item.create_time) }}</span>
+              </div>
+
+              <div class="info-body">
                 <div class="info-row">
                   <span class="label">模型:</span>
                   <span class="value">{{ item.model_id || '未知' }}</span>
-                </div>
-                <div class="info-row">
-                  <span class="label">消耗:</span>
+                  <span class="label" style="margin-left: 12px;">消耗:</span>
                   <span class="value highlight">{{ item.cost_points }} 积分</span>
                 </div>
-                <div v-if="item.prompt_summary" class="info-row prompt-row">
+                <div v-if="item.prompt_summary" class="info-row">
                   <span class="label">提示词:</span>
                   <span class="value prompt-text">{{ item.prompt_summary }}</span>
                 </div>
-                <div v-if="item.params_json" class="info-row params-row">
+                <div v-if="item.params_json" class="info-row">
                   <span class="label">参数:</span>
                   <span class="value params-text">{{ formatParams(item.params_json) }}</span>
                 </div>
               </div>
-            </div>
 
-            <div class="card-footer">
-              <el-button
-                type="primary"
-                size="small"
-                class="download-btn"
-                @click="downloadResult(item)"
-              >
-                <el-icon><Download /></el-icon>
-                下载{{ getDownloadLabel(item.task_type) }}
-              </el-button>
-              <el-button
-                type="danger"
-                size="small"
-                text
-                @click="confirmDelete(item)"
-              >
-                删除
-              </el-button>
+              <div class="info-footer">
+                <el-button
+                  type="danger"
+                  size="small"
+                  text
+                  @click="confirmDelete(item)"
+                >
+                  删除
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -105,8 +146,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
-import { ArrowDown, Loading, Download } from '@element-plus/icons-vue'
+import { ref, onMounted, reactive } from 'vue'
+import { ArrowDown, Loading, Download, WarningFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
 
@@ -133,9 +174,6 @@ const queryType = props.fixedType || ''
 // 切换展开
 const toggleExpand = () => {
   expanded.value = !expanded.value
-  if (expanded.value && historyList.value.length === 0) {
-    loadHistory()
-  }
 }
 
 // 加载历史记录
@@ -152,7 +190,12 @@ const loadHistory = async () => {
     }
 
     const res = await request.get('/api/history', { params })
-    historyList.value = res.items || []
+    // 初始化每条记录的预览状态
+    historyList.value = (res.items || []).map(item => ({
+      ...item,
+      previewStatus: 'initial',  // initial, loading, success, failed
+      previewUrl: null
+    }))
     total.value = res.total || 0
     totalPages.value = res.total_pages || 0
   } catch (e) {
@@ -181,16 +224,6 @@ const getTagLabel = (taskType) => {
     text: '文案'
   }
   return labelMap[taskType] || taskType
-}
-
-// 获取下载按钮文字
-const getDownloadLabel = (taskType) => {
-  const labelMap = {
-    video: '视频',
-    image: '图片',
-    text: '文件'
-  }
-  return labelMap[taskType] || '文件'
 }
 
 // 格式化时间
@@ -224,40 +257,35 @@ const formatParams = (params) => {
   return parts.join(' | ') || JSON.stringify(params)
 }
 
-// 下载结果
-const downloadResult = async (item) => {
-  if (!item.result_url) {
-    ElMessage.warning('该记录没有可下载的结果')
+// 处理预览点击
+const handlePreviewClick = async (item) => {
+  // 如果已经成功，不重复下载（图片点击放大由 el-image 处理）
+  if (item.previewStatus === 'success') {
     return
   }
 
+  // 开始下载
+  item.previewStatus = 'loading'
+
   try {
-    ElMessage.info('开始下载...')
-
-    // 获取文件
     const response = await fetch(item.result_url)
+
+    if (!response.ok) {
+      throw new Error('资源不可用')
+    }
+
     const blob = await response.blob()
+    const blobUrl = URL.createObjectURL(blob)
 
-    // 创建下载链接
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
+    // 成功
+    item.previewUrl = blobUrl
+    item.previewStatus = 'success'
 
-    // 根据类型设置文件名
-    const ext = item.task_type === 'video' ? 'mp4' : item.task_type === 'image' ? 'png' : 'txt'
-    a.download = `${item.task_type}_${item.id}_${Date.now()}.${ext}`
-
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
-
-    ElMessage.success('下载完成')
+    ElMessage.success('加载成功')
   } catch (e) {
-    console.error('下载失败', e)
-    // 降级方案：直接打开链接
-    window.open(item.result_url, '_blank')
-    ElMessage.warning('请在新窗口中保存文件')
+    console.error('加载失败', e)
+    item.previewStatus = 'failed'
+    // 失败不弹提示，用户可以看到"已清理"状态
   }
 }
 
@@ -272,6 +300,11 @@ const confirmDelete = async (item) => {
 
     await request.delete(`/api/history/${item.id}`)
     ElMessage.success('删除成功')
+
+    // 释放 blob URL
+    if (item.previewUrl && item.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(item.previewUrl)
+    }
 
     // 从列表中移除
     historyList.value = historyList.value.filter(h => h.id !== item.id)
@@ -344,10 +377,6 @@ onMounted(() => {
   transform: rotate(180deg);
 }
 
-.filter-select {
-  width: 120px;
-}
-
 .history-content {
   margin-top: 12px;
   background: rgba(0, 0, 0, 0.3);
@@ -361,7 +390,7 @@ onMounted(() => {
 .expand-enter-active,
 .expand-leave-active {
   transition: all 0.4s ease;
-  max-height: 1000px;
+  max-height: 2000px;
 }
 
 .expand-enter-from,
@@ -393,11 +422,14 @@ onMounted(() => {
   gap: 12px;
 }
 
+/* 卡片样式：左侧预览 + 右侧信息 */
 .history-card {
+  display: flex;
+  gap: 16px;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 12px;
   animation: cardSlideIn 0.4s ease forwards;
   animation-delay: var(--delay, 0s);
   opacity: 0;
@@ -411,11 +443,88 @@ onMounted(() => {
   }
 }
 
-.card-header {
+/* 左侧预览区域 */
+.preview-area {
+  width: 100px;
+  height: 100px;
+  min-width: 100px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+
+.preview-area:hover {
+  border-color: rgba(0, 242, 96, 0.5);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.preview-icon {
+  font-size: 28px;
+  color: #a0aec0;
+  margin-bottom: 4px;
+}
+
+.preview-text {
+  font-size: 12px;
+  color: #718096;
+}
+
+.preview-area.preview-success {
+  border: 1px solid rgba(0, 242, 96, 0.3);
+  cursor: default;
+}
+
+.preview-area.preview-success:hover {
+  border-color: rgba(0, 242, 96, 0.5);
+}
+
+.preview-area.preview-failed {
+  border-color: rgba(255, 100, 100, 0.3);
+  background: rgba(255, 100, 100, 0.1);
+}
+
+.failed-icon {
+  color: #ff6464;
+}
+
+.failed-text {
+  color: #ff6464;
+}
+
+.retry-hint {
+  font-size: 10px;
+  color: #718096;
+  margin-top: 4px;
+}
+
+.preview-image,
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+/* 右侧信息区域 */
+.info-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.info-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .card-time {
@@ -423,25 +532,25 @@ onMounted(() => {
   color: #718096;
 }
 
-.card-body {
-  margin-bottom: 12px;
+.info-body {
+  flex: 1;
 }
 
 .info-row {
   display: flex;
   font-size: 13px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  align-items: flex-start;
 }
 
 .info-row .label {
   color: #718096;
-  width: 60px;
   flex-shrink: 0;
 }
 
 .info-row .value {
   color: #e2e8f0;
-  flex: 1;
+  margin-left: 4px;
 }
 
 .info-row .value.highlight {
@@ -449,35 +558,25 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.prompt-row .prompt-text {
+.prompt-text {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.params-row .params-text {
+.params-text {
   font-size: 12px;
   color: #a0aec0;
 }
 
-.card-footer {
+.info-footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 10px;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.download-btn {
-  background: rgba(0, 242, 96, 0.2) !important;
-  border: 1px solid rgba(0, 242, 96, 0.3) !important;
-  color: #00f260 !important;
-}
-
-.download-btn:hover {
-  background: rgba(0, 242, 96, 0.3) !important;
 }
 
 .pagination-wrapper {
@@ -503,7 +602,12 @@ onMounted(() => {
   color: #a0aec0;
 }
 
-:deep(.el-select .el-input__wrapper) {
-  background: rgba(0, 0, 0, 0.3) !important;
+/* 图片预览遮罩层适配 */
+:deep(.el-image-viewer__wrapper) {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+:deep(.el-image-viewer__close) {
+  color: #fff;
 }
 </style>
