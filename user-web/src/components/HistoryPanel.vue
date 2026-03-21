@@ -543,6 +543,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  padding-right: 32px;
 }
 
 .info-header {
