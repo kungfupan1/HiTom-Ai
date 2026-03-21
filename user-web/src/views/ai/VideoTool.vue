@@ -113,22 +113,6 @@
               </el-row>
             </template>
 
-            <!-- 费用信息 -->
-            <div class="cost-info-box">
-              <div class="cost-row">
-                <span>当前积分</span>
-                <span class="cost-value">{{ userStore.points }}</span>
-              </div>
-              <div class="cost-row">
-                <span>消耗积分</span>
-                <span class="cost-value highlight">{{ costInfo.cost }}</span>
-              </div>
-              <div class="cost-row">
-                <span>剩余积分</span>
-                <span class="cost-value">{{ userStore.points - costInfo.cost }}</span>
-              </div>
-            </div>
-
             <el-button type="primary" size="large" style="width: 100%" class="neon-btn" @click="submitTask" :loading="loading" :disabled="loading || !canGenerate">
               {{ loading ? '生成中...' : `🚀 立即生成 (消耗${costInfo.cost}积分)` }}
             </el-button>
@@ -734,30 +718,6 @@ onUnmounted(() => {
 .neon-btn:hover { opacity: 0.9; }
 .optimize-btn { background: transparent !important; border: 1px solid #e6a23c !important; color: #e6a23c !important; }
 .cyber-action-btn { background: rgba(0, 242, 96, 0.2) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
-
-/* 费用信息框 */
-.cost-info-box {
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-.cost-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
-  font-size: 14px;
-  color: #a0aec0;
-}
-.cost-value {
-  font-weight: bold;
-  color: #fff;
-}
-.cost-value.highlight {
-  color: #00f260;
-  font-size: 18px;
-}
 
 /* 费用说明 */
 .pricing-card :deep(.el-card__header) {
