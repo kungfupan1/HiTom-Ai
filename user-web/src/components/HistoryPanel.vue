@@ -7,19 +7,6 @@
         <el-tag size="small" type="info" effect="dark" round>{{ total }} 条记录</el-tag>
       </div>
       <div class="header-right">
-        <el-select
-          v-if="expanded"
-          v-model="filterType"
-          size="small"
-          class="filter-select"
-          @click.stop
-          @change="loadHistory"
-        >
-          <el-option value="" label="全部类型" />
-          <el-option value="video" label="视频" />
-          <el-option value="image" label="图片" />
-          <el-option value="text" label="文案" />
-        </el-select>
         <el-icon class="expand-icon" :class="{ rotated: expanded }">
           <ArrowDown />
         </el-icon>
@@ -47,12 +34,12 @@
           >
             <div class="card-header">
               <el-tag
-                :type="item.task_type === 'video' ? 'danger' : item.task_type === 'image' ? 'success' : 'warning'"
+                :type="getTagType(item.task_type)"
                 size="small"
                 effect="dark"
                 round
               >
-                {{ item.task_type === 'video' ? '视频' : item.task_type === 'image' ? '图片' : '文案' }}
+                {{ getTagLabel(item.task_type) }}
               </el-tag>
               <span class="card-time">{{ formatTime(item.create_time) }}</span>
             </div>
@@ -86,7 +73,7 @@
                 @click="downloadResult(item)"
               >
                 <el-icon><Download /></el-icon>
-                下载{{ item.task_type === 'video' ? '视频' : item.task_type === 'image' ? '图片' : '文件' }}
+                下载{{ getDownloadLabel(item.task_type) }}
               </el-button>
               <el-button
                 type="danger"
@@ -118,15 +105,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { ArrowDown, Loading, Download } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
 
 const props = defineProps({
-  defaultType: {
+  // 固定类型：传入后隐藏筛选器，只显示该类型记录
+  fixedType: {
     type: String,
-    default: '' // 默认显示全部
+    default: '' // video, image, text
   }
 })
 
@@ -138,7 +126,9 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const totalPages = ref(0)
-const filterType = ref(props.defaultType)
+
+// 根据传入的 fixedType 确定查询类型
+const queryType = props.fixedType || ''
 
 // 切换展开
 const toggleExpand = () => {
@@ -156,8 +146,9 @@ const loadHistory = async () => {
       page: currentPage.value,
       page_size: pageSize.value
     }
-    if (filterType.value) {
-      params.task_type = filterType.value
+    // 如果有固定类型，使用固定类型
+    if (queryType) {
+      params.task_type = queryType
     }
 
     const res = await request.get('/api/history', { params })
@@ -170,6 +161,36 @@ const loadHistory = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 获取标签类型
+const getTagType = (taskType) => {
+  const typeMap = {
+    video: 'danger',
+    image: 'success',
+    text: 'warning'
+  }
+  return typeMap[taskType] || 'info'
+}
+
+// 获取标签文字
+const getTagLabel = (taskType) => {
+  const labelMap = {
+    video: '视频',
+    image: '图片',
+    text: '文案'
+  }
+  return labelMap[taskType] || taskType
+}
+
+// 获取下载按钮文字
+const getDownloadLabel = (taskType) => {
+  const labelMap = {
+    video: '视频',
+    image: '图片',
+    text: '文件'
+  }
+  return labelMap[taskType] || '文件'
 }
 
 // 格式化时间

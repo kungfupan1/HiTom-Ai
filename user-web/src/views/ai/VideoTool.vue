@@ -161,7 +161,7 @@
         </el-card>
 
         <!-- 历史记录面板 -->
-        <HistoryPanel ref="historyPanelRef" default-type="video" />
+        <HistoryPanel ref="historyPanelRef" fixed-type="video" />
       </el-col>
     </el-row>
   </div>

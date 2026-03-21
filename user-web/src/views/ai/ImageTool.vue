@@ -202,8 +202,9 @@
         </el-tab-pane>
       </el-tabs>
 
-    <!-- 历史记录面板 -->
-    <HistoryPanel ref="historyPanelRef" default-type="image" style="margin-top: 16px;" />
+      <!-- 历史记录面板 -->
+      <HistoryPanel ref="historyPanelRef" fixed-type="image" style="margin-top: 16px;" />
+    </div>
   </div>
 </template>
 
