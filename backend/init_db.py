@@ -6,7 +6,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 
 from database import engine, SessionLocal
-from models import Base, AIModel, ModelPricing, SystemConfig
+from models import Base, AIModel, SystemConfig
 
 # 创建表
 Base.metadata.create_all(bind=engine)
@@ -58,22 +58,44 @@ sora2 = AIModel(
         "ratios": ["9:16", "16:9", "1:1"],
         "resolutions": [{"value": "720P", "label": "标清"}, {"value": "1080P", "label": "高清"}]
     },
+    config_schema={
+        "api_contract": {
+            "endpoint_url": "https://ai.t8star.cn/v2/videos/generations",
+            "status_url": "https://ai.t8star.cn/v2/videos/generations/{task_id}",
+            "status_method": "GET",
+            "timeout": 180000
+        },
+        "request_mapping": {
+            "static_params": {"private": True},
+            "dynamic_params": {
+                "model": "model",
+                "prompt": "prompt",
+                "duration": "duration",
+                "ratio": "aspect_ratio",
+                "resolution": "hd",
+                "images": "images"
+            },
+            "value_transformations": {
+                "resolution": {
+                    "target_field": "hd",
+                    "transform": "resolution === '1080P'"
+                }
+            }
+        },
+        "response_mapping": {
+            "task_id_path": "task_id",
+            "status_path": "status",
+            "result_url_path": "data.output[0].url"
+        },
+        "pricing_rules": {
+            "mode": "dynamic",
+            "duration_pricing": {"5": 2, "10": 2, "15": 5, "25": 25},
+            "resolution_pricing": {"720P": 0, "1080P": 2}
+        }
+    },
     pricing_description="Sora-2 视频生成：\n5-10秒：2积分 | 15秒：5积分 | 25秒：25积分\n高清(1080P)：额外+2积分"
 )
 db.add(sora2)
-db.commit()
-db.refresh(sora2)
-
-# Sora-2 计费规则
-sora2_pricing = [
-    ModelPricing(model_id=sora2.id, pricing_type="duration", pricing_key="5", price=2, sort_order=1),
-    ModelPricing(model_id=sora2.id, pricing_type="duration", pricing_key="10", price=2, sort_order=2),
-    ModelPricing(model_id=sora2.id, pricing_type="duration", pricing_key="15", price=5, sort_order=3),
-    ModelPricing(model_id=sora2.id, pricing_type="duration", pricing_key="25", price=25, sort_order=4),
-    ModelPricing(model_id=sora2.id, pricing_type="resolution", pricing_key="720P", price=0, sort_order=1),
-    ModelPricing(model_id=sora2.id, pricing_type="resolution", pricing_key="1080P", price=2, sort_order=2),
-]
-db.add_all(sora2_pricing)
 
 # Sora-2 Pro 模型
 sora2pro = AIModel(
@@ -111,21 +133,16 @@ sora2pro = AIModel(
         "ratios": ["9:16", "16:9", "1:1"],
         "resolutions": [{"value": "720P", "label": "标清"}, {"value": "1080P", "label": "高清"}]
     },
+    config_schema={
+        "pricing_rules": {
+            "mode": "dynamic",
+            "duration_pricing": {"5": 3, "10": 3, "15": 8, "25": 35},
+            "resolution_pricing": {"720P": 0, "1080P": 3}
+        }
+    },
     pricing_description="Sora-2 Pro 视频生成：\n5-10秒：3积分 | 15秒：8积分 | 25秒：35积分\n高清(1080P)：额外+3积分"
 )
 db.add(sora2pro)
-db.commit()
-db.refresh(sora2pro)
-
-sora2pro_pricing = [
-    ModelPricing(model_id=sora2pro.id, pricing_type="duration", pricing_key="5", price=3, sort_order=1),
-    ModelPricing(model_id=sora2pro.id, pricing_type="duration", pricing_key="10", price=3, sort_order=2),
-    ModelPricing(model_id=sora2pro.id, pricing_type="duration", pricing_key="15", price=8, sort_order=3),
-    ModelPricing(model_id=sora2pro.id, pricing_type="duration", pricing_key="25", price=35, sort_order=4),
-    ModelPricing(model_id=sora2pro.id, pricing_type="resolution", pricing_key="720P", price=0, sort_order=1),
-    ModelPricing(model_id=sora2pro.id, pricing_type="resolution", pricing_key="1080P", price=3, sort_order=2),
-]
-db.add_all(sora2pro_pricing)
 
 # Grok Video 3 模型
 grok3 = AIModel(
@@ -163,20 +180,16 @@ grok3 = AIModel(
         "ratios": ["2:3", "3:2", "1:1"],
         "resolutions": [{"value": "720P", "label": "标清"}, {"value": "1080P", "label": "高清"}]
     },
+    config_schema={
+        "pricing_rules": {
+            "mode": "dynamic",
+            "duration_pricing": {"5": 3, "10": 3, "15": 8},
+            "resolution_pricing": {"720P": 0, "1080P": 3}
+        }
+    },
     pricing_description="Grok Video 3 视频生成：\n5-10秒：3积分 | 15秒：8积分\n高清(1080P)：额外+3积分"
 )
 db.add(grok3)
-db.commit()
-db.refresh(grok3)
-
-grok3_pricing = [
-    ModelPricing(model_id=grok3.id, pricing_type="duration", pricing_key="5", price=3, sort_order=1),
-    ModelPricing(model_id=grok3.id, pricing_type="duration", pricing_key="10", price=3, sort_order=2),
-    ModelPricing(model_id=grok3.id, pricing_type="duration", pricing_key="15", price=8, sort_order=3),
-    ModelPricing(model_id=grok3.id, pricing_type="resolution", pricing_key="720P", price=0, sort_order=1),
-    ModelPricing(model_id=grok3.id, pricing_type="resolution", pricing_key="1080P", price=3, sort_order=2),
-]
-db.add_all(grok3_pricing)
 
 # Nano Banana 2 图片模型
 nanobanana = AIModel(
@@ -204,18 +217,16 @@ nanobanana = AIModel(
         "resolutions": [{"value": "1K", "label": "1K"}, {"value": "2K", "label": "2K"}, {"value": "4K", "label": "4K"}],
         "ratios": ["1:1", "3:4", "4:3", "9:16", "16:9"]
     },
+    config_schema={
+        "pricing_rules": {
+            "mode": "dynamic",
+            "unit_price": 2,
+            "resolution_pricing": {"1K": 0, "2K": 1, "4K": 3}
+        }
+    },
     pricing_description="图片生成：2积分/张\n2K：+1积分 | 4K：+3积分"
 )
 db.add(nanobanana)
-db.commit()
-db.refresh(nanobanana)
-
-nanobanana_pricing = [
-    ModelPricing(model_id=nanobanana.id, pricing_type="resolution", pricing_key="1K", price=0, sort_order=1),
-    ModelPricing(model_id=nanobanana.id, pricing_type="resolution", pricing_key="2K", price=1, sort_order=2),
-    ModelPricing(model_id=nanobanana.id, pricing_type="resolution", pricing_key="4K", price=3, sort_order=3),
-]
-db.add_all(nanobanana_pricing)
 
 print("[OK] 默认模型已添加")
 

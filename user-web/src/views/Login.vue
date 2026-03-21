@@ -84,7 +84,8 @@ const handleLogin = async () => {
       formData.append('password', form.password)
 
       const res = await request.post('/auth/token', formData)
-      await userStore.login(res.access_token)
+      // 传入整个响应对象，包含 access_token 和 refresh_token
+      await userStore.login(res)
 
       ElMessage.success('登录成功')
       router.push('/')

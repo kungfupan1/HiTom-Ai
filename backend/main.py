@@ -2,19 +2,20 @@
 Hi-Tom-AI Backend API
 FastAPI 主应用
 """
-from fastapi import FastAPI, Depends, HTTPException, status
+import asyncio
+from datetime import datetime, timedelta
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 from pydantic import BaseModel
 
-from database import get_db, init_db
+from database import get_db, init_db, SessionLocal
 from models import Base
 import crud
 import schemas
-from utils import hash_password, verify_password, create_access_token, decode_token
+from utils import hash_password, verify_password, create_access_token, decode_token, create_token_pair, verify_refresh_token
 from engines.payload_builder import payload_builder
 
 # 创建应用
@@ -78,11 +79,29 @@ async def get_current_admin(current_user = Depends(get_current_user)):
     return current_user
 
 
+# ============ 后台任务 ============
+async def cleanup_expired_reserves_task():
+    """定时清理过期的积分预扣记录"""
+    while True:
+        await asyncio.sleep(300)  # 每5分钟执行一次
+        try:
+            db = SessionLocal()
+            count = crud.cleanup_expired_reserves(db)
+            db.close()
+            if count > 0:
+                print(f"[定时任务] 清理了 {count} 条过期预扣记录")
+        except Exception as e:
+            print(f"[定时任务] 清理过期预扣失败: {e}")
+
+
 # ============ 启动事件 ============
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    # 启动后台清理任务
+    asyncio.create_task(cleanup_expired_reserves_task())
     print("[OK] Hi-Tom-AI Backend started")
+    print("[OK] 积分预扣清理任务已启动（每5分钟执行）")
 
 
 # ============ 健康检查 ============
@@ -122,6 +141,7 @@ async def admin_get_stats(
 @app.post("/auth/register", response_model=schemas.UserResponse)
 async def register(
     user_data: schemas.UserCreate,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """用户注册"""
@@ -131,11 +151,20 @@ async def register(
 
     signup_bonus = int(crud.get_config(db, "signup_bonus", "10"))
     user = crud.create_user(db, user_data.username, hash_password(user_data.password), signup_bonus)
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=user.id, action="REGISTER",
+        detail={"username": user.username, "signup_bonus": signup_bonus},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return user
 
 
 @app.post("/auth/token")
 async def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -150,8 +179,55 @@ async def login(
     if user.is_active == 0:
         raise HTTPException(status_code=403, detail="账号已被封禁")
 
-    token = create_access_token(data={"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+    # 创建令牌对
+    access_token, refresh_token = create_token_pair(user.id)
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=user.id, action="LOGIN",
+        detail={"username": user.username},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": 7200  # 2小时，单位秒
+    }
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+@app.post("/auth/refresh")
+async def refresh_token(
+    request: RefreshTokenRequest,
+    req: Request,
+    db: Session = Depends(get_db)
+):
+    """刷新访问令牌"""
+    user_id = verify_refresh_token(request.refresh_token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="刷新令牌无效或已过期")
+
+    user = crud.get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+
+    if user.is_active == 0:
+        raise HTTPException(status_code=403, detail="账号已被封禁")
+
+    # 创建新的令牌对
+    access_token, refresh_token = create_token_pair(user.id)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": 7200
+    }
 
 
 @app.get("/users/me", response_model=schemas.UserResponse)
@@ -204,6 +280,7 @@ async def admin_get_users(
 @app.post("/admin/users/{user_id}/toggle-status")
 async def admin_toggle_user_status(
     user_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
@@ -211,6 +288,14 @@ async def admin_toggle_user_status(
     user = crud.toggle_user_status(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="USER_TOGGLE_STATUS",
+        detail={"target_user_id": user_id, "target_username": user.username, "new_status": user.is_active},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return {"status": "success", "is_active": user.is_active}
 
 
@@ -226,6 +311,7 @@ async def admin_get_models(
 @app.post("/admin/models", response_model=schemas.AIModelResponse)
 async def admin_create_model(
     model_data: schemas.AIModelCreate,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
@@ -235,13 +321,23 @@ async def admin_create_model(
         raise HTTPException(status_code=400, detail="模型ID已存在")
 
     model_dict = model_data.model_dump()
-    return crud.create_model(db, model_dict)
+    model = crud.create_model(db, model_dict)
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="MODEL_CREATE",
+        detail={"model_id": model.model_id, "display_name": model.display_name},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
+    return model
 
 
 @app.put("/admin/models/{model_pk}", response_model=schemas.AIModelResponse)
 async def admin_update_model(
     model_pk: int,
     model_data: schemas.AIModelUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
@@ -250,18 +346,40 @@ async def admin_update_model(
     model = crud.update_model(db, model_pk, update_dict)
     if not model:
         raise HTTPException(status_code=404, detail="模型不存在")
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="MODEL_UPDATE",
+        detail={"model_pk": model_pk, "model_id": model.model_id, "updated_fields": list(update_dict.keys())},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return model
 
 
 @app.delete("/admin/models/{model_pk}")
 async def admin_delete_model(
     model_pk: int,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
     """管理员删除模型"""
+    model = crud.get_model_by_pk(db, model_pk)
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    model_id = model.model_id
     if not crud.delete_model(db, model_pk):
         raise HTTPException(status_code=404, detail="模型不存在")
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="MODEL_DELETE",
+        detail={"model_pk": model_pk, "model_id": model_id},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return {"status": "success", "message": "模型已删除"}
 
 
@@ -467,12 +585,21 @@ async def admin_get_config(
 @app.put("/admin/config")
 async def admin_update_config(
     data: schemas.SystemConfigUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
     """管理员更新系统配置"""
     for key, value in data.configs.items():
         crud.set_config(db, key, value)
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="CONFIG_UPDATE",
+        detail={"updated_keys": list(data.configs.keys())},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return {"status": "success", "message": "配置已更新"}
 
 
@@ -480,6 +607,7 @@ async def admin_update_config(
 async def admin_recharge(
     username: str,
     amount: int,
+    request: Request,
     db: Session = Depends(get_db),
     admin = Depends(get_current_admin)
 ):
@@ -488,9 +616,48 @@ async def admin_recharge(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
+    old_balance = user.points
     user.points += amount
     db.commit()
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=admin.id, action="RECHARGE",
+        detail={"target_user_id": user.id, "target_username": username, "amount": amount, "old_balance": old_balance, "new_balance": user.points},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
     return {"status": "success", "new_balance": user.points}
+
+
+# ============ 操作日志接口 ============
+@app.get("/admin/operation-logs")
+async def admin_get_operation_logs(
+    user_id: Optional[int] = None,
+    action: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    db: Session = Depends(get_db),
+    admin = Depends(get_current_admin)
+):
+    """管理员获取操作日志"""
+    logs, total = crud.get_operation_logs(db, user_id, action, page, page_size)
+    return {
+        "items": [
+            {
+                "id": log.id,
+                "user_id": log.user_id,
+                "action": log.action,
+                "detail": log.detail,
+                "ip_address": log.ip_address,
+                "create_time": log.create_time.isoformat() if log.create_time else None
+            }
+            for log in logs
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
 
 
 # ============ 内容配置接口（管理员） ============

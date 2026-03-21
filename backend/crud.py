@@ -9,7 +9,7 @@ import uuid
 import json
 
 from models import User, AIModel, ModelPricing, SystemConfig, PointLog, PointReserve, APILog
-from models import ContentConfig
+from models import ContentConfig, OperationLog
 from engines.pricing_engine import pricing_engine
 
 
@@ -263,12 +263,12 @@ def get_pricing_rules(db: Session, model_id: int) -> List[ModelPricing]:
 
 
 def calculate_cost(db: Session, model_id: str, duration: int = None, resolution: str = None, ratio: str = None, count: int = 1) -> Dict[str, Any]:
-    """计算费用 - 优先使用 config_schema.pricing_rules"""
+    """计算费用 - 使用 config_schema.pricing_rules"""
     model = get_model_by_id(db, model_id)
     if not model:
         return {"error": "模型不存在"}
 
-    # 优先使用 config_schema 中的 pricing_rules（新逻辑）
+    # 使用 config_schema 中的 pricing_rules
     if model.config_schema and "pricing_rules" in model.config_schema:
         pricing_rules = model.config_schema["pricing_rules"]
         form_data = {
@@ -282,42 +282,17 @@ def calculate_cost(db: Session, model_id: str, duration: int = None, resolution:
         result["model_name"] = model.display_name
         return result
 
-    # 回退到旧的 ModelPricing 表逻辑（向后兼容）
-    base_cost = model.base_price
-    duration_cost = 0
-    resolution_cost = 0
-    ratio_cost = 0
-
-    pricing_rules = get_pricing_rules(db, model.id)
-    pricing_map = {}
-    for rule in pricing_rules:
-        key = f"{rule.pricing_type}_{rule.pricing_key}"
-        pricing_map[key] = rule.price
-
-    if duration and model.billing_mode == "duration":
-        duration_cost = pricing_map.get(f"duration_{duration}", 0)
-        base_cost = 0
-
-    if resolution:
-        resolution_cost = pricing_map.get(f"resolution_{resolution}", 0)
-
-    if ratio:
-        ratio_cost = pricing_map.get(f"ratio_{ratio}", 0)
-
-    total_cost = (base_cost + duration_cost + resolution_cost + ratio_cost) * count
-
+    # 如果没有配置 pricing_rules，使用基础价格
+    total_cost = model.base_price * count
     return {
         "model_id": model_id,
         "model_name": model.display_name,
         "cost": total_cost,
         "breakdown": {
-            "base_cost": base_cost * count,
-            "duration_cost": duration_cost * count,
-            "resolution_cost": resolution_cost * count,
-            "ratio_cost": ratio_cost * count,
+            "base_cost": total_cost,
             "total_cost": total_cost
         },
-        "description": model.pricing_description or ""
+        "description": model.pricing_description or "未配置计费规则，使用基础价格"
     }
 
 
@@ -337,7 +312,7 @@ def calculate_cost_dynamic(db: Session, model_id: str, form_data: Dict[str, Any]
     if not model:
         return {"error": "模型不存在", "cost": 0}
 
-    # 优先使用 config_schema 中的 pricing_rules
+    # 使用 config_schema 中的 pricing_rules
     if model.config_schema and "pricing_rules" in model.config_schema:
         pricing_rules = model.config_schema["pricing_rules"]
         result = pricing_engine.calculate(pricing_rules, form_data)
@@ -345,13 +320,16 @@ def calculate_cost_dynamic(db: Session, model_id: str, form_data: Dict[str, Any]
         result["model_name"] = model.display_name
         return result
 
-    # 向后兼容：使用旧的计费方式
-    duration = form_data.get("duration")
-    resolution = form_data.get("resolution")
-    ratio = form_data.get("aspect_ratio") or form_data.get("ratio")
+    # 如果没有配置 pricing_rules，使用基础价格
     count = form_data.get("count", 1)
-
-    return calculate_cost(db, model_id, duration, resolution, ratio, count)
+    total_cost = model.base_price * count
+    return {
+        "model_id": model_id,
+        "model_name": model.display_name,
+        "cost": total_cost,
+        "breakdown": {"base_cost": total_cost, "total_cost": total_cost},
+        "description": "未配置计费规则，使用基础价格"
+    }
 
 
 # ============ 系统配置相关 ============
@@ -421,3 +399,70 @@ def set_content_config(db: Session, key: str, config: Dict[str, Any], descriptio
 def get_all_content_configs(db: Session) -> List[ContentConfig]:
     """获取所有内容配置"""
     return db.query(ContentConfig).all()
+
+
+# ============ 操作日志相关 ============
+def log_operation(
+    db: Session,
+    user_id: int,
+    action: str,
+    detail: Dict[str, Any] = None,
+    ip_address: str = None,
+    user_agent: str = None
+) -> OperationLog:
+    """
+    记录操作日志
+
+    Args:
+        user_id: 用户ID
+        action: 操作类型 (LOGIN, LOGOUT, POINTS_CHANGE, MODEL_CREATE, CONFIG_UPDATE, RECHARGE, etc.)
+        detail: 操作详情
+        ip_address: IP地址
+        user_agent: 用户代理
+
+    Returns:
+        操作日志记录
+    """
+    log = OperationLog(
+        user_id=user_id,
+        action=action,
+        detail=detail or {},
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return log
+
+
+def get_operation_logs(
+    db: Session,
+    user_id: int = None,
+    action: str = None,
+    page: int = 1,
+    page_size: int = 50
+) -> tuple:
+    """
+    获取操作日志列表
+
+    Args:
+        user_id: 用户ID（可选，不传则查全部）
+        action: 操作类型（可选，不传则查全部）
+        page: 页码
+        page_size: 每页数量
+
+    Returns:
+        (logs, total)
+    """
+    query = db.query(OperationLog)
+
+    if user_id:
+        query = query.filter(OperationLog.user_id == user_id)
+    if action:
+        query = query.filter(OperationLog.action == action)
+
+    total = query.count()
+    logs = query.order_by(OperationLog.create_time.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    return logs, total

@@ -140,3 +140,16 @@ class ContentConfig(Base):
     config = Column(JSON, nullable=False)  # 配置内容，如 {"enabled": true, "modal_content": "..."}
     description = Column(String(255))
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class OperationLog(Base):
+    """操作日志表 - 记录关键操作"""
+    __tablename__ = "operation_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    action = Column(String(50), nullable=False)  # LOGIN, LOGOUT, POINTS_CHANGE, MODEL_CREATE, CONFIG_UPDATE...
+    detail = Column(JSON)  # 操作详情
+    ip_address = Column(String(50))
+    user_agent = Column(String(255))
+    create_time = Column(DateTime, default=datetime.now)
