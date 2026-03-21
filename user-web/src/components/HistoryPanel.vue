@@ -374,10 +374,6 @@ onMounted(() => {
 
 .history-content {
   margin-top: 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 16px;
   overflow: hidden;
 }
 
@@ -392,22 +388,27 @@ onMounted(() => {
 .expand-leave-to {
   max-height: 0;
   opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
 }
 
 .loading-state,
 .empty-state {
   text-align: center;
-  padding: 40px;
+  padding: 30px 16px;
   color: #718096;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .loading-state .el-icon {
+  font-size: 24px;
+}
+
+.empty-state .el-icon {
   font-size: 24px;
 }
 
@@ -415,6 +416,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 0 4px;
 }
 
 /* 卡片样式：左侧预览 + 右侧信息 */
@@ -598,7 +600,8 @@ onMounted(() => {
 }
 
 .pagination-wrapper {
-  margin-top: 20px;
+  margin-top: 16px;
+  padding: 12px 0 4px;
   display: flex;
   justify-content: center;
 }

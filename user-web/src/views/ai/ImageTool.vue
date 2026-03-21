@@ -26,7 +26,7 @@
                   <span class="label-text">核心卖点 (必填)</span>
                   <el-tooltip content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
                     <el-button type="primary" plain round size="small" class="optimize-btn" @click="analyzeImages" :loading="analyzing" :disabled="fileList.length === 0">
-                      {{ analyzing ? '正在分析...' : '看图自动生成文案' }}
+                      {{ analyzing ? '正在分析...' : '✨ 看图自动生成文案' }}
                     </el-button>
                   </el-tooltip>
                 </div>
