@@ -74,7 +74,7 @@ def get_user_points(db: Session, user_id: int) -> int:
 
 
 # ============ 积分预扣相关 ============
-def reserve_points(db: Session, user_id: int, amount: int, model_id: str, expire_seconds: int = 600) -> Optional[PointReserve]:
+def reserve_points(db: Session, user_id: int, amount: int, model_id: str, expire_seconds: int = 1200) -> Optional[PointReserve]:
     """预扣积分，返回预扣记录"""
     user = get_user_by_id(db, user_id)
     if not user or user.points < amount:

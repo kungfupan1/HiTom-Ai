@@ -537,7 +537,7 @@ async def reserve_points(
         amount=reserve.amount,
         balance_before=current_user.points + reserve.amount,
         balance_after=current_user.points,
-        expire_seconds=600
+        expire_seconds=1200
     )
 
 
