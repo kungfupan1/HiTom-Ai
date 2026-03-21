@@ -31,7 +31,7 @@
                   />
                 </el-form-item>
 
-                <!-- textarea 类型 -->
+                <!-- textarea 类型 (核心卖点) -->
                 <template v-else-if="field.ui_type === 'textarea'">
                   <div class="label-box">
                     <span class="label-text">{{ field.label }}{{ field.required ? ' (必填)' : '' }}</span>
@@ -55,40 +55,11 @@
                     />
                   </el-form-item>
                 </template>
-
-                <!-- select 类型 -->
-                <el-form-item v-else-if="field.ui_type === 'select'" :label="field.label">
-                  <el-select
-                    v-model="dynamicFormData[field.field_name]"
-                    class="cyber-select"
-                    popper-class="cyber-popper"
-                    :filterable="field.filterable || false"
-                    @change="field.affects_pricing ? calculateCost() : null"
-                  >
-                    <el-option
-                      v-for="opt in field.options"
-                      :key="opt.value"
-                      :value="opt.value"
-                      :label="opt.label"
-                    />
-                  </el-select>
-                </el-form-item>
-
-                <!-- input-number 类型 -->
-                <el-form-item v-else-if="field.ui_type === 'input-number'" :label="field.label">
-                  <el-input-number
-                    v-model="dynamicFormData[field.field_name]"
-                    :min="field.min || 1"
-                    :max="field.max || 10"
-                    class="cyber-input-number"
-                    @change="field.affects_pricing ? calculateCost() : null"
-                  />
-                </el-form-item>
               </template>
             </template>
 
-            <!-- 参考图片上传 (特殊处理) -->
-            <el-form-item label="参考图片 (最多5张)">
+            <!-- 参考图片上传 (紧跟核心卖点下方) -->
+            <el-form-item label="参考图片 (最多5张，支持拖拽)">
               <el-upload
                 action="#"
                 list-type="picture-card"
@@ -97,11 +68,50 @@
                 :on-change="handleFileChange"
                 :on-remove="handleRemove"
                 multiple
+                drag
                 class="cyber-upload"
               >
                 <el-icon><Plus /></el-icon>
               </el-upload>
             </el-form-item>
+
+            <!-- 其他参数：一行2个布局 -->
+            <template v-for="(group, idx) in optionFieldGroups" :key="idx">
+              <el-row :gutter="10">
+                <el-col v-for="field in group" :key="field.field_name" :span="12">
+                  <!-- select 类型 -->
+                  <el-form-item v-if="field.ui_type === 'select'" :label="field.label">
+                    <el-select
+                      v-model="dynamicFormData[field.field_name]"
+                      style="width: 100%"
+                      class="cyber-select"
+                      popper-class="cyber-popper"
+                      :filterable="field.filterable || false"
+                      @change="field.affects_pricing ? calculateCost() : null"
+                    >
+                      <el-option
+                        v-for="opt in field.options"
+                        :key="opt.value"
+                        :value="opt.value"
+                        :label="opt.label"
+                      />
+                    </el-select>
+                  </el-form-item>
+
+                  <!-- input-number 类型 -->
+                  <el-form-item v-else-if="field.ui_type === 'input-number'" :label="field.label">
+                    <el-input-number
+                      v-model="dynamicFormData[field.field_name]"
+                      :min="field.min || 1"
+                      :max="field.max || 10"
+                      style="width: 100%"
+                      class="cyber-input-number"
+                      @change="field.affects_pricing ? calculateCost() : null"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </template>
 
             <!-- 费用信息 -->
             <div class="cost-info-box">
@@ -204,6 +214,24 @@ const dynamicFormData = reactive({})
 // 计算属性：UI Schema
 const uiSchema = computed(() => {
   return currentModel.value?.config_schema?.ui_schema || []
+})
+
+// 计算属性：选项类型字段（select、input-number），用于一行2个布局
+const optionFields = computed(() => {
+  return uiSchema.value.filter(f =>
+    f.field_name !== 'model' &&
+    f.field_name !== 'images' &&
+    (f.ui_type === 'select' || f.ui_type === 'input-number')
+  )
+})
+
+// 计算属性：选项字段分组（每2个一组）
+const optionFieldGroups = computed(() => {
+  const groups = []
+  for (let i = 0; i < optionFields.value.length; i += 2) {
+    groups.push(optionFields.value.slice(i, i + 2))
+  }
+  return groups
 })
 
 // 计算属性：费用说明
