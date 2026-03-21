@@ -705,6 +705,20 @@ onUnmounted(() => {
 }
 :deep(.el-upload--picture-card:hover) { border-color: #0575e6 !important; color: #fff !important; }
 
+/* 拖拽上传区域 */
+:deep(.el-upload-dragger) {
+  background-color: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+}
+
+/* 已上传图片列表项 */
+:deep(.el-upload-list--picture-card .el-upload-list__item) {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+}
+
 /* 4. 按钮 & 文本 */
 .gradient-text { font-size: 18px; font-weight: 800; background: linear-gradient(90deg, #00f260, #0575e6); -webkit-background-clip: text; color: transparent; text-shadow: 0 0 10px rgba(5, 117, 230, 0.3); }
 .label-box { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 5px; }

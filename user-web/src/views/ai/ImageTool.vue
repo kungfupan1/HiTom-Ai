@@ -627,6 +627,13 @@ const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessio
 }
 :deep(.el-upload--picture-card:hover) { border-color: #0575e6 !important; color: #fff !important; }
 
+/* 已上传图片列表项 */
+:deep(.el-upload-list--picture-card .el-upload-list__item) {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+}
+
 :deep(.el-slider__runway) { background-color: rgba(255,255,255,0.2) !important; }
 :deep(.el-slider__bar) { background-color: #00f260 !important; }
 :deep(.el-slider__button) { border-color: #00f260 !important; }
