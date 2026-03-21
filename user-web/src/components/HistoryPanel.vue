@@ -155,6 +155,7 @@ import { ref, onMounted, reactive } from 'vue'
 import { ArrowDown, Loading, Download, WarningFilled, Close } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/api/request'
+import { getCachedMedia, fetchAndCacheMedia, deleteCachedMedia } from '@/utils/mediaCache'
 
 const props = defineProps({
   // 固定类型：传入后隐藏筛选器，只显示该类型记录
@@ -199,11 +200,15 @@ const loadHistory = async () => {
     }
 
     const res = await request.get('/api/history', { params })
-    // 初始化每条记录的预览状态
-    historyList.value = (res.items || []).map(item => ({
-      ...item,
-      previewStatus: 'initial',  // initial, loading, success, failed
-      previewUrl: null
+    // 初始化每条记录的预览状态，并检查缓存
+    historyList.value = await Promise.all((res.items || []).map(async item => {
+      // 检查缓存
+      const cached = await getCachedMedia(item.result_url)
+      return {
+        ...item,
+        previewStatus: cached ? 'success' : 'initial',  // 如果有缓存直接显示成功
+        previewUrl: cached ? cached.blobUrl : null
+      }
     }))
     total.value = res.total || 0
     totalPages.value = res.total_pages || 0
@@ -268,7 +273,7 @@ const formatParams = (params) => {
 
 // 处理预览点击
 const handlePreviewClick = async (item) => {
-  // 如果已经成功，不重复下载（图片点击放大由 el-image 处理）
+  // 如果已经成功，不重复下载
   if (item.previewStatus === 'success') {
     return
   }
@@ -277,20 +282,18 @@ const handlePreviewClick = async (item) => {
   item.previewStatus = 'loading'
 
   try {
-    const response = await fetch(item.result_url)
-
-    if (!response.ok) {
-      throw new Error('资源不可用')
-    }
-
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
+    // 使用缓存工具下载并缓存
+    const result = await fetchAndCacheMedia(item.result_url, item.task_type)
 
     // 成功
-    item.previewUrl = blobUrl
+    item.previewUrl = result.blobUrl
     item.previewStatus = 'success'
 
-    ElMessage.success('加载成功')
+    if (result.fromCache) {
+      ElMessage.success('已从缓存加载')
+    } else {
+      ElMessage.success('加载成功')
+    }
   } catch (e) {
     console.error('加载失败', e)
     item.previewStatus = 'failed'
@@ -310,10 +313,8 @@ const confirmDelete = async (item) => {
     await request.delete(`/api/history/${item.id}`)
     ElMessage.success('删除成功')
 
-    // 释放 blob URL
-    if (item.previewUrl && item.previewUrl.startsWith('blob:')) {
-      URL.revokeObjectURL(item.previewUrl)
-    }
+    // 删除缓存
+    await deleteCachedMedia(item.result_url)
 
     // 从列表中移除
     historyList.value = historyList.value.filter(h => h.id !== item.id)

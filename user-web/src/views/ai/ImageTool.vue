@@ -181,6 +181,7 @@ import { ElMessage } from 'element-plus'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import HistoryPanel from '@/components/HistoryPanel.vue'
+import { cacheMedia } from '@/utils/mediaCache'
 
 const emit = defineEmits(['refresh-points', 'log'])
 
@@ -400,6 +401,17 @@ const generateImage = async () => {
         emit('refresh-points')
         emit('log', `第 ${i+1} 张生成成功！`)
         successCount++
+
+        // 缓存图片
+        try {
+          const response = await fetch(url)
+          if (response.ok) {
+            const blob = await response.blob()
+            await cacheMedia(url, blob, 'image')
+          }
+        } catch (e) {
+          console.warn('缓存图片失败', e)
+        }
 
         // 保存历史记录
         saveImageHistory(url, currentPrompt)

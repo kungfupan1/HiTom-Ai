@@ -175,6 +175,7 @@ import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI } from
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import HistoryPanel from '@/components/HistoryPanel.vue'
+import { cacheMedia } from '@/utils/mediaCache'
 
 const emit = defineEmits(['refresh-points', 'log'])
 const userStore = useUserStore()
@@ -520,13 +521,25 @@ const startStatusPolling = () => {
       if (statusMapping.success?.some(s => rawStatus.includes(s))) {
         clearInterval(statusTimer)
         progress.value = 100
-        videoUrl.value = getJsonValue(res, resultUrlPath)
+        const resultUrl = getJsonValue(res, resultUrlPath)
+        videoUrl.value = resultUrl
         taskStatus.value = 'success'
         loading.value = false
         ElMessage.success('视频生成完成！')
 
+        // 缓存视频
+        try {
+          const response = await fetch(resultUrl)
+          if (response.ok) {
+            const blob = await response.blob()
+            await cacheMedia(resultUrl, blob, 'video')
+          }
+        } catch (e) {
+          console.warn('缓存视频失败', e)
+        }
+
         // 保存生成历史记录
-        saveHistory(videoUrl.value)
+        saveHistory(resultUrl)
       }
       else if (statusMapping.failed?.some(s => rawStatus.includes(s)) || (errMsg && errMsg !== '未知错误' && errMsg.includes('失败'))) {
         clearInterval(statusTimer)
