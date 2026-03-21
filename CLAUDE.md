@@ -21,6 +21,12 @@ cd user-web && npm install && npm run dev   # port 8080
 cd admin-web && npm install && npm run dev  # port 8081
 ```
 
+## Tech Stack
+
+**Backend**: FastAPI 0.115 + SQLAlchemy 2.0 + SQLite + Pydantic 2.10
+**Frontend**: Vue 3.5 + Vite 5.4 + Element Plus 2.8 + Pinia 2.2 + Axios
+**Cloud**: Tencent Cloud Functions (Node.js 16)
+
 ## Default Credentials
 
 - Admin: `admin` / `admin123`
@@ -63,6 +69,21 @@ const KEY_POOL = {
 **Placeholders:**
 - `MODELSCOPE_API_KEY` → replaced with ModelScope key
 - `T8STAR_API_KEY` → replaced with T8Star key
+
+**Cloud Function Request Format:**
+```javascript
+// Frontend sends to cloud function:
+{
+  target_url: "https://ai.t8star.cn/v2/videos/generations",
+  target_method: "POST",  // or "GET" for status queries
+  model: "sora-2",
+  prompt: "..."
+}
+// Headers: { Authorization: "Bearer T8STAR_API_KEY" }  // placeholder
+
+// Cloud function replaces placeholder, removes target_url/target_method,
+// forwards to AI provider, returns response directly
+```
 
 ### Points Reserve/Confirm/Refund
 
@@ -120,13 +141,61 @@ Key tables (see `backend/models.py`):
 - `point_reserves`: Pre-deducted points with 600s expiry
 - `point_logs`: Points transaction history
 - `system_config`: Key-value system settings
+- `content_configs`: JSON configurations for feature modules (e.g., modal content, enabled flags)
+
+## config_schema Structure (AIModel)
+
+The `config_schema` JSON field in `ai_models` table uses this structure:
+```json
+{
+  "pricing_rules": {
+    "mode": "static|dynamic|tiered",
+    "base_price": 10,
+    "duration_pricing": {"5": 5, "10": 8},
+    "resolution_pricing": {"720P": 0, "1080P": 5}
+  },
+  "request_mapping": {
+    "static_params": {"model": "sora-2"},
+    "dynamic_params": {"prompt": "prompt", "duration": "duration"},
+    "prompt_template": "Generate a video: {prompt}"
+  },
+  "response_mapping": {
+    "task_id_path": "data.task_id",
+    "status_path": "data.status",
+    "result_url_path": "data.output[0].url"
+  },
+  "frontend_config": {
+    "duration_options": [5, 10, 15],
+    "resolution_options": ["720P", "1080P"]
+  }
+}
+```
 
 ## Important Files
 
 - `backend/main.py`: FastAPI routes
 - `backend/crud.py`: Core business logic
 - `backend/models.py`: Database models
-- `backend/engines/pricing_engine.py`: Dynamic pricing
-- `backend/engines/payload_builder.py`: API request construction
+- `backend/schemas.py`: Pydantic request/response schemas
+- `backend/engines/pricing_engine.py`: Dynamic pricing calculation
+- `backend/engines/payload_builder.py`: API request construction from config_schema
+- `backend/init_db.py`: Database initialization with default admin/models
 - `user-web/src/api/index.js`: Frontend AI calls with placeholder pattern
+- `user-web/src/api/request.js`: Axios instance with auth interceptor
+- `user-web/src/views/ai/`: AI generation pages (video, image, text)
+- `admin-web/src/views/`: Admin pages (Dashboard, ModelManage, SystemConfig, ContentManage)
 - `tencent-function/index.js`: Cloud function with `KEY_POOL`
+
+## Frontend Structure
+
+**user-web/src/views/**:
+- `ai/`: AI generation features (video, image, text/copywriting)
+- `service/`: Service pages
+- `shrimp/`: Feature-specific module (e.g., shrimp product workflow)
+
+**admin-web/src/views/**:
+- `Dashboard.vue`: Overview stats
+- `ModelManage.vue`: AI model CRUD with config_schema editor
+- `SystemConfig.vue`: System-wide settings (tencent_function_url, prompts, etc.)
+- `ContentManage.vue`: Feature module configurations
+- `UserManage.vue`: User management and points recharge
