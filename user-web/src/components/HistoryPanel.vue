@@ -67,22 +67,20 @@
 
               <!-- 加载成功 -->
               <template v-else-if="item.previewStatus === 'success'">
-                <!-- 图片预览 -->
-                <el-image
+                <!-- 图片缩略图 -->
+                <img
                   v-if="item.task_type === 'image'"
                   :src="item.previewUrl"
-                  fit="cover"
                   class="preview-image"
-                  :preview-src-list="[item.previewUrl]"
+                  @click.stop="openImagePreview(item.previewUrl)"
                 />
-                <!-- 视频预览 -->
+                <!-- 视频缩略图 -->
                 <video
                   v-else-if="item.task_type === 'video'"
                   :src="item.previewUrl"
                   class="preview-video"
                   preload="metadata"
-                  @click.stop
-                  controls
+                  @click.stop="openVideoFullscreen"
                   muted
                 />
               </template>
@@ -137,6 +135,18 @@
         </div>
       </div>
     </transition>
+
+    <!-- 全窗口图片预览 (Teleport 到 body) -->
+    <Teleport to="body">
+      <transition name="fade">
+        <div v-if="imagePreviewVisible" class="fullscreen-preview" @click="closeImagePreview">
+          <div class="preview-close-btn" @click="closeImagePreview">
+            <el-icon><Close /></el-icon>
+          </div>
+          <img :src="imagePreviewUrl" class="fullscreen-image" @click.stop />
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -162,6 +172,10 @@ const total = ref(0)
 const currentPage = ref(1)
 const pageSize = ref(10)
 const totalPages = ref(0)
+
+// 全窗口图片预览状态
+const imagePreviewVisible = ref(false)
+const imagePreviewUrl = ref('')
 
 // 根据传入的 fixedType 确定查询类型
 const queryType = props.fixedType || ''
@@ -316,6 +330,32 @@ const confirmDelete = async (item) => {
       ElMessage.error('删除失败')
     }
   }
+}
+
+// 打开全窗口图片预览
+const openImagePreview = (url) => {
+  imagePreviewUrl.value = url
+  imagePreviewVisible.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+// 关闭图片预览
+const closeImagePreview = () => {
+  imagePreviewVisible.value = false
+  document.body.style.overflow = ''
+}
+
+// 视频全屏播放
+const openVideoFullscreen = (e) => {
+  const video = e.target
+  if (video.requestFullscreen) {
+    video.requestFullscreen()
+  } else if (video.webkitRequestFullscreen) {
+    video.webkitRequestFullscreen()
+  } else if (video.msRequestFullscreen) {
+    video.msRequestFullscreen()
+  }
+  video.play()
 }
 
 // 暴露方法给父组件
@@ -631,5 +671,64 @@ onMounted(() => {
 
 :deep(.el-image-viewer__close) {
   color: #fff;
+}
+</style>
+
+<style>
+/* 全窗口图片预览样式 (Teleport 到 body，不用 scoped) */
+.fullscreen-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.fullscreen-image {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.preview-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #fff;
+  font-size: 24px;
+}
+
+.preview-close-btn:hover {
+  background: rgba(255, 80, 80, 0.5);
+  border-color: rgba(255, 80, 80, 0.8);
+}
+
+/* 过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -146,7 +146,14 @@
 
           <div v-if="videoUrl" class="result-state">
             <el-alert title="生成成功！" type="success" show-icon style="margin-bottom: 20px; background: rgba(0,242,96,0.1); border-color: #00f260; color: #00f260;" />
-            <video :src="videoUrl" controls autoplay style="width: 100%; max-height: 600px; background: black; border-radius: 8px; border: 1px solid #333;"></video>
+            <video
+              ref="videoPlayerRef"
+              :src="videoUrl"
+              controls
+              autoplay
+              style="width: 100%; max-height: 600px; background: black; border-radius: 8px; border: 1px solid #333; cursor: pointer;"
+              @click="toggleVideoFullscreen"
+            ></video>
             <div style="margin-top: 20px; text-align: center;">
                <el-button type="success" size="large" class="cyber-action-btn" tag="a" :href="videoUrl" target="_blank">⬇️ 下载视频文件</el-button>
             </div>
@@ -174,6 +181,9 @@ const userStore = useUserStore()
 
 // ========== 历史记录面板 ref ==========
 const historyPanelRef = ref(null)
+
+// ========== 视频播放器 ref ==========
+const videoPlayerRef = ref(null)
 
 // ========== 状态 ==========
 const loading = ref(false)
@@ -593,6 +603,24 @@ const stopStatusPolling = () => {
 // ========== 辅助函数 ==========
 const formatDescription = (text) => {
   return text?.replace(/\n/g, '<br>') || ''
+}
+
+// ========== 视频全屏切换 ==========
+const toggleVideoFullscreen = () => {
+  const video = videoPlayerRef.value
+  if (!video) return
+
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
+  } else {
+    if (video.requestFullscreen) {
+      video.requestFullscreen()
+    } else if (video.webkitRequestFullscreen) {
+      video.webkitRequestFullscreen()
+    } else if (video.msRequestFullscreen) {
+      video.msRequestFullscreen()
+    }
+  }
 }
 
 // ========== 保存历史记录 ==========

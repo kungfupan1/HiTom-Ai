@@ -125,20 +125,15 @@
 
           <div v-else class="image-grid">
             <div v-for="(img, index) in generatedImages" :key="index" class="img-card-wrapper">
-              <el-image
+              <img
                 :src="img"
-                :preview-src-list="generatedImages"
-                :initial-index="index"
                 class="generated-img"
-                :lazy="true"
-                ref="imageRefs"
-              >
-                <template #placeholder><div class="image-slot">加载中...</div></template>
-              </el-image>
+                @click="openImagePreview(img)"
+              />
               <div class="hover-mask">
                   <div class="mask-actions">
                       <el-tooltip content="预览大图" placement="top">
-                        <el-button circle type="info" class="mask-btn" @click="openPreview(index)"><el-icon><ZoomIn /></el-icon></el-button>
+                        <el-button circle type="info" class="mask-btn" @click="openImagePreview(img)"><el-icon><ZoomIn /></el-icon></el-button>
                       </el-tooltip>
                       <el-tooltip content="下载原图" placement="top">
                          <el-button circle type="success" class="mask-btn" @click="downloadSingleImage(img, index)"><el-icon><Download /></el-icon></el-button>
@@ -153,6 +148,27 @@
         <HistoryPanel ref="historyPanelRef" fixed-type="image" />
       </el-col>
     </el-row>
+
+    <!-- 全窗口图片预览 (Teleport 到 body) -->
+    <Teleport to="body">
+      <transition name="fade">
+        <div v-if="imagePreviewVisible" class="fullscreen-preview" @click="closeImagePreview">
+          <div class="preview-close-btn" @click="closeImagePreview">
+            <el-icon><Close /></el-icon>
+          </div>
+          <img :src="imagePreviewUrl" class="fullscreen-image" @click.stop />
+          <div class="preview-nav">
+            <el-button circle class="nav-btn" @click.stop="prevImage" :disabled="currentImageIndex === 0">
+              <el-icon><ArrowLeft /></el-icon>
+            </el-button>
+            <span class="preview-counter">{{ currentImageIndex + 1 }} / {{ generatedImages.length }}</span>
+            <el-button circle class="nav-btn" @click.stop="nextImage" :disabled="currentImageIndex === generatedImages.length - 1">
+              <el-icon><ArrowRight /></el-icon>
+            </el-button>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
   </div>
 </template>
 
@@ -160,7 +176,7 @@
 import { reactive, ref, onMounted, watch } from 'vue'
 import request from '../../api/request'
 import { analyzeImages as analyzeImagesAPI, planImagePrompts as planImagePromptsAPI, generateImage as generateImageAPI } from '../../api/index'
-import { Plus, ZoomIn, Download } from '@element-plus/icons-vue'
+import { Plus, ZoomIn, Download, Close, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
@@ -178,7 +194,11 @@ const stopped = ref(false)
 const fileList = ref([])
 const imageBase64List = ref([])
 const generatedImages = ref([])
-const imageRefs = ref([])
+
+// 全窗口图片预览状态
+const imagePreviewVisible = ref(false)
+const imagePreviewUrl = ref('')
+const currentImageIndex = ref(0)
 
 const form = reactive({
   product_type: '',
@@ -211,11 +231,31 @@ const handleRemove = (file, fileListRef) => {
   handleFileChange(null, fileListRef)
 }
 
-const openPreview = (index) => {
-    if(imageRefs.value && imageRefs.value[index]) {
-        imageRefs.value[index].showViewer = true
-        document.querySelector(`.image-grid .img-card-wrapper:nth-child(${index+1}) .el-image__inner`).click()
-    }
+// 全窗口图片预览
+const openImagePreview = (url) => {
+  imagePreviewUrl.value = url
+  currentImageIndex.value = generatedImages.value.indexOf(url)
+  imagePreviewVisible.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+const closeImagePreview = () => {
+  imagePreviewVisible.value = false
+  document.body.style.overflow = ''
+}
+
+const prevImage = () => {
+  if (currentImageIndex.value > 0) {
+    currentImageIndex.value--
+    imagePreviewUrl.value = generatedImages.value[currentImageIndex.value]
+  }
+}
+
+const nextImage = () => {
+  if (currentImageIndex.value < generatedImages.value.length - 1) {
+    currentImageIndex.value++
+    imagePreviewUrl.value = generatedImages.value[currentImageIndex.value]
+  }
 }
 
 const analyzeImages = async () => {
@@ -510,7 +550,8 @@ const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessio
 .placeholder-icon { font-size: 60px; margin-bottom: 20px; opacity: 0.5; color: #a0aec0; }
 .image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
 .img-card-wrapper { position: relative; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.05); }
-.generated-img { width: 100%; height: auto; min-height: 120px; display: block; }
+.generated-img { width: 100%; height: auto; min-height: 120px; display: block; cursor: pointer; transition: transform 0.3s; }
+.generated-img:hover { transform: scale(1.02); }
 .hover-mask { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); opacity: 0; transition: opacity 0.3s; display: flex; justify-content: center; align-items: center; z-index: 10; }
 .img-card-wrapper:hover .hover-mask { opacity: 1; }
 .mask-actions { display: flex; gap: 10px; }
@@ -537,4 +578,94 @@ const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessio
   background: rgba(255, 255, 255, 0.1) !important; color: #fff !important;
 }
 .cyber-popper .el-select-dropdown__item.is-selected { color: #00f260 !important; font-weight: bold; }
+
+/* 全窗口图片预览样式 (Teleport 到 body，不用 scoped) */
+.fullscreen-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.fullscreen-image {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.preview-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #fff;
+  font-size: 24px;
+}
+
+.preview-close-btn:hover {
+  background: rgba(255, 80, 80, 0.5);
+  border-color: rgba(255, 80, 80, 0.8);
+}
+
+.preview-nav {
+  position: absolute;
+  bottom: 30px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.nav-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+  width: 44px;
+  height: 44px;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background: rgba(0, 242, 96, 0.3) !important;
+  border-color: #00f260 !important;
+}
+
+.nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.preview-counter {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+/* 过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 </style>
