@@ -37,8 +37,7 @@
                     <span class="label-text">{{ field.label }}{{ field.required ? ' (必填)' : '' }}</span>
                     <el-tooltip v-if="field.field_name === 'selling_points'" content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
                       <el-button type="primary" plain round size="small" class="optimize-btn" @click="analyzeImages" :loading="analyzing" :disabled="fileList.length === 0">
-                        <el-icon class="el-icon--left"><MagicStick /></el-icon>
-                        {{ analyzing ? '正在分析...' : '✨ 看图自动生成文案' }}
+                        {{ analyzing ? '正在分析...' : '看图自动生成文案' }}
                       </el-button>
                     </el-tooltip>
                   </div>
@@ -162,7 +161,7 @@
 </template>
 
 <script setup>
-import { Plus, MagicStick } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import request from '@/api/request'
 import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI } from '@/api/index'
@@ -716,7 +715,13 @@ onUnmounted(() => {
 
 .neon-btn { background: linear-gradient(90deg, #7f00ff, #e100ff) !important; border: none; box-shadow: 0 4px 15px rgba(127, 0, 255, 0.4); color: #fff; }
 .neon-btn:hover { opacity: 0.9; }
-.optimize-btn { background: transparent !important; border: 1px solid #e6a23c !important; color: #e6a23c !important; }
+.optimize-btn {
+  background: transparent !important;
+  border: 1px solid #e6a23c !important;
+  color: #e6a23c !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
 .cyber-action-btn { background: rgba(0, 242, 96, 0.2) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
 
 /* 费用说明 */

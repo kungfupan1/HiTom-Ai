@@ -26,7 +26,7 @@
                   <span class="label-text">核心卖点 (必填)</span>
                   <el-tooltip content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
                     <el-button type="primary" plain round size="small" class="optimize-btn" @click="analyzeImages" :loading="analyzing" :disabled="fileList.length === 0">
-                      {{ analyzing ? '正在分析...' : '看图生成文案' }}
+                      {{ analyzing ? '正在分析...' : '看图自动生成文案' }}
                     </el-button>
                   </el-tooltip>
                 </div>
@@ -653,7 +653,13 @@ const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessio
 /* 4. 按钮 & 文本 */
 .neon-btn { background: linear-gradient(90deg, #7f00ff, #e100ff) !important; border: none !important; box-shadow: 0 4px 15px rgba(127,0,255,0.4); color: #fff; }
 .neon-btn:hover { opacity: 0.9; }
-.optimize-btn { background: transparent !important; border: 1px solid #e6a23c !important; color: #e6a23c !important; }
+.optimize-btn {
+  background: transparent !important;
+  border: 1px solid #e6a23c !important;
+  color: #e6a23c !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
 .stop-btn { background: #ff0055 !important; border: none !important; box-shadow: 0 4px 15px rgba(255, 0, 85, 0.4); color: #fff; }
 .cyber-action-btn { background: rgba(0,242,96,0.1) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
 .mask-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; }
