@@ -61,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/api/request'
@@ -98,6 +98,21 @@ const rules = {
     { validator: validateConfirm, trigger: 'blur' }
   ]
 }
+
+// 接力式预加载 - 注册页渲染后立即开始
+const preloadComponents = () => {
+  import('@/layout/MainLayout.vue')
+    .then(() => import('@/views/ai/VideoTool.vue'))
+    .then(() => import('@/views/ai/ImageTool.vue'))
+    .then(() => import('@/views/ai/GeneralVideoTool.vue'))
+    .then(() => import('@/views/service/ComingSoon.vue'))
+    .then(() => import('@/views/shrimp/OpenClawDeploy.vue'))
+    .catch(err => console.warn('预加载组件失败:', err))
+}
+
+onMounted(() => {
+  preloadComponents()
+})
 
 const handleRegister = async () => {
   if (!formRef.value) return

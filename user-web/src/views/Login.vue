@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/api/request'
@@ -70,6 +70,23 @@ const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
+
+// 接力式预加载 - 登录页渲染后立即开始
+const preloadComponents = () => {
+  // 预加载顺序：MainLayout → VideoTool → ImageTool → 其他组件
+  import('@/layout/MainLayout.vue')
+    .then(() => import('@/views/ai/VideoTool.vue'))
+    .then(() => import('@/views/ai/ImageTool.vue'))
+    .then(() => import('@/views/ai/GeneralVideoTool.vue'))
+    .then(() => import('@/views/service/ComingSoon.vue'))
+    .then(() => import('@/views/shrimp/OpenClawDeploy.vue'))
+    .catch(err => console.warn('预加载组件失败:', err))
+}
+
+onMounted(() => {
+  // 登录页已渲染，启动接力预加载
+  preloadComponents()
+})
 
 const handleLogin = async () => {
   if (!formRef.value) return
