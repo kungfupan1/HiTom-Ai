@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# 数据库文件 (通过 volume 挂载)
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 其他
+*.log
+*.md
+.DS_Store
+Thumbs.db

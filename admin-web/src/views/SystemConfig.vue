@@ -13,29 +13,8 @@
       >
         <el-divider content-position="left">积分规则</el-divider>
 
-        <el-row :gutter="20">
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="注册赠送积分">
-              <el-input-number v-model="form.signup_bonus" :min="0" />
-            </el-form-item>
-          </el-col>
-          <el-col :xs="24" :sm="12">
-            <el-form-item label="图片生成基础价">
-              <el-input-number v-model="form.image_base_price" :min="0" />
-              <span class="form-tip">积分/张</span>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">费用说明</el-divider>
-
-        <el-form-item label="费用说明文案">
-          <el-input
-            v-model="form.pricing_description"
-            type="textarea"
-            :rows="6"
-            placeholder="展示给用户的费用说明，支持换行"
-          />
+        <el-form-item label="注册赠送积分">
+          <el-input-number v-model="form.signup_bonus" :min="0" />
         </el-form-item>
 
         <el-divider content-position="left">服务配置</el-divider>
@@ -332,9 +311,7 @@ const loading = ref(false)
 const activePromptCollapse = ref(['selling'])
 
 const form = reactive({
-  signup_bonus: 10,
-  image_base_price: 2,
-  pricing_description: '',
+  signup_bonus: 0,
   tencent_function_url: '',
   // 三个独立的系统提示词
   image_selling_points_prompt: '',
@@ -463,9 +440,7 @@ const generateKeyName = (provider) => {
 const loadConfig = async () => {
   try {
     const res = await request.get('/admin/config')
-    form.signup_bonus = parseInt(res.signup_bonus?.value || '10')
-    form.image_base_price = parseInt(res.image_base_price?.value || '2')
-    form.pricing_description = res.pricing_description?.value || ''
+    form.signup_bonus = parseInt(res.signup_bonus?.value || '0')
     form.tencent_function_url = res.tencent_function_url?.value || ''
     // 加载三个系统提示词
     form.image_selling_points_prompt = res.image_selling_points_prompt?.value || DEFAULT_PROMPTS.selling
@@ -497,8 +472,6 @@ const handleSave = async () => {
     await request.put('/admin/config', {
       configs: {
         signup_bonus: String(form.signup_bonus),
-        image_base_price: String(form.image_base_price),
-        pricing_description: form.pricing_description,
         tencent_function_url: form.tencent_function_url,
         // 保存三个系统提示词
         image_selling_points_prompt: form.image_selling_points_prompt,

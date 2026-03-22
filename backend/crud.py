@@ -361,9 +361,7 @@ def get_pricing_info(db: Session) -> Dict[str, Any]:
     config_map = {c.key: c.value for c in configs}
 
     return {
-        "signup_bonus": int(config_map.get("signup_bonus", "10")),
-        "image_base_price": int(config_map.get("image_base_price", "2")),
-        "pricing_description": config_map.get("pricing_description", ""),
+        "signup_bonus": int(config_map.get("signup_bonus", "0")),
         "tencent_function_url": config_map.get("tencent_function_url", ""),
         # 三个系统提示词配置
         "image_selling_points_prompt": config_map.get("image_selling_points_prompt", ""),

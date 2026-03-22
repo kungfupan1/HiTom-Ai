@@ -149,7 +149,7 @@ async def register(
     if existing:
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    signup_bonus = int(crud.get_config(db, "signup_bonus", "10"))
+    signup_bonus = int(crud.get_config(db, "signup_bonus", "0"))
     user = crud.create_user(db, user_data.username, hash_password(user_data.password), signup_bonus)
 
     # 记录操作日志
@@ -162,22 +162,64 @@ async def register(
     return user
 
 
+# 登录失败限制配置
+MAX_LOGIN_FAIL_COUNT = 7  # 最大连续失败次数
+LOCK_DURATION_MINUTES = 30  # 锁定时长（分钟）
+
+
 @app.post("/auth/token")
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """用户登录"""
+    """用户登录（带失败次数限制）"""
     user = crud.get_user_by_username(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.password_hash):
+
+    # 用户不存在
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误"
         )
 
+    # 检查是否被锁定
+    if user.locked_until and user.locked_until > datetime.now():
+        remaining = (user.locked_until - datetime.now()).seconds // 60
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"账号已被锁定，请 {remaining} 分钟后重试"
+        )
+
+    # 验证密码
+    if not verify_password(form_data.password, user.password_hash):
+        # 密码错误，增加失败次数
+        user.login_fail_count = (user.login_fail_count or 0) + 1
+
+        # 达到上限则锁定
+        if user.login_fail_count >= MAX_LOGIN_FAIL_COUNT:
+            user.locked_until = datetime.now() + timedelta(minutes=LOCK_DURATION_MINUTES)
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"连续登录失败 {MAX_LOGIN_FAIL_COUNT} 次，账号已锁定 {LOCK_DURATION_MINUTES} 分钟"
+            )
+
+        db.commit()
+        remaining_attempts = MAX_LOGIN_FAIL_COUNT - user.login_fail_count
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"用户名或密码错误，剩余尝试次数: {remaining_attempts}"
+        )
+
+    # 检查账号状态
     if user.is_active == 0:
         raise HTTPException(status_code=403, detail="账号已被封禁")
+
+    # 登录成功，重置失败计数
+    user.login_fail_count = 0
+    user.locked_until = None
+    db.commit()
 
     # 创建令牌对
     access_token, refresh_token = create_token_pair(user.id)
@@ -195,6 +237,50 @@ async def login(
         "token_type": "bearer",
         "expires_in": 7200  # 2小时，单位秒
     }
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求"""
+    old_password: str
+    new_password: str
+
+
+@app.post("/auth/change-password")
+async def change_password(
+    request: Request,
+    data: ChangePasswordRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """修改密码"""
+    # 验证旧密码
+    if not verify_password(data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="旧密码错误")
+
+    # 新密码不能与旧密码相同
+    if verify_password(data.new_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="新密码不能与旧密码相同")
+
+    # 新密码长度检查
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码长度不能少于6位")
+
+    # 更新密码
+    current_user.password_hash = hash_password(data.new_password)
+    # 重置登录失败计数
+    current_user.login_fail_count = 0
+    current_user.locked_until = None
+    db.commit()
+
+    # 记录操作日志
+    crud.log_operation(
+        db, user_id=current_user.id, action="CHANGE_PASSWORD",
+        detail={"username": current_user.username},
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent")
+    )
+
+    return {"status": "success", "message": "密码修改成功"}
 
 
 class RefreshTokenRequest(BaseModel):
@@ -817,6 +903,29 @@ async def get_content_config(
     """用户端获取内容配置"""
     config = crud.get_content_config(db, key)
     return {"key": key, "config": config or {}}
+
+
+@app.get("/api/content-configs-enabled")
+async def get_content_configs_enabled(db: Session = Depends(get_db)):
+    """用户端获取所有内容配置的启用状态"""
+    all_configs = crud.get_all_content_configs(db)
+    # 默认全部启用
+    default_enabled = {
+        'shrimp_openclaw': True,
+        'shrimp_skills': True,
+        'shrimp_ai_staff': True,
+        'service_shop': True,
+        'service_course': True,
+        'service_logistics': True,
+        'service_software': True,
+        'service_network': True,
+        'service_other': True
+    }
+    # 用数据库配置覆盖默认值
+    for c in all_configs:
+        if c.key in default_enabled and c.config:
+            default_enabled[c.key] = c.config.get('enabled', True)
+    return {"configs": default_enabled}
 
 
 # ============ 启动入口 ============

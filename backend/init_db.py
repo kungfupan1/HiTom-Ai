@@ -232,9 +232,7 @@ print("[OK] 默认模型已添加")
 
 # ============ 添加系统配置 ============
 configs = [
-    SystemConfig(key="signup_bonus", value="10", description="注册赠送积分"),
-    SystemConfig(key="image_base_price", value="2", description="图片生成基础费用"),
-    SystemConfig(key="pricing_description", value="费用说明：\n• 图片生成：2积分/张\n• 视频生成：按时长计费\n• 高清模式：额外加价", description="费用说明展示文字"),
+    SystemConfig(key="signup_bonus", value="0", description="注册赠送积分"),
     SystemConfig(key="tencent_function_url", value="https://1307708790-dpjcghai7x.ap-guangzhou.tencentscf.com", description="腾讯云函数URL"),
 ]
 db.add_all(configs)
@@ -245,15 +243,20 @@ print("[OK] 系统配置已添加")
 from utils import hash_password
 from models import User
 
+# 注意：管理员密码建议在系统上线后立即修改！
+# 默认密码 admin123 仅用于首次初始化
+# 可以通过管理后台或用户页面的「修改密码」功能更改
 admin = User(
     username="admin",
-    password_hash=hash_password("admin123"),
+    # 默认密码: admin123 (请在生产环境中修改)
+    password_hash=hash_password("admin123"),  # TODO: 生产环境请修改此密码
     points=999999,
     role="admin"
 )
 db.add(admin)
 
 print("[OK] 管理员账号已添加 (admin / admin123)")
+print("[WARN] 请在生产环境中及时修改默认密码！")
 
 db.commit()
 db.close()

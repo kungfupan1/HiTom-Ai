@@ -27,27 +27,27 @@
             <el-menu-item index="/ai/video/general">✨ 普通视频生成</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="shrimp">
+          <el-sub-menu index="shrimp" v-if="hasEnabledShrimpItems">
             <template #title>
               <el-icon class="gradient-icon"><Cpu /></el-icon>
               <span v-show="!isCollapse">云端养虾</span>
             </template>
-            <el-menu-item index="/shrimp/openclaw">🦐 OpenClaw部署</el-menu-item>
-            <el-menu-item index="/shrimp/skills">🛒 Skills市场</el-menu-item>
-            <el-menu-item index="/shrimp/ai-staff">🤖 AI员工打造</el-menu-item>
+            <el-menu-item v-if="contentConfigs.shrimp_openclaw" index="/shrimp/openclaw">🦐 OpenClaw部署</el-menu-item>
+            <el-menu-item v-if="contentConfigs.shrimp_skills" index="/shrimp/skills">🛒 Skills市场</el-menu-item>
+            <el-menu-item v-if="contentConfigs.shrimp_ai_staff" index="/shrimp/ai-staff">🤖 AI员工打造</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="service">
+          <el-sub-menu index="service" v-if="hasEnabledServiceItems">
             <template #title>
               <el-icon class="gradient-icon"><Shop /></el-icon>
               <span v-show="!isCollapse">跨境服务资源</span>
             </template>
-            <el-menu-item index="/service/shop">🏪 店铺买卖/租赁</el-menu-item>
-            <el-menu-item index="/service/course">📚 课程+陪跑</el-menu-item>
-            <el-menu-item index="/service/logistics">📦 货代/小包/海外仓</el-menu-item>
-            <el-menu-item index="/service/software">💻 增强软件</el-menu-item>
-            <el-menu-item index="/service/network">🌐 网络&硬件服务</el-menu-item>
-            <el-menu-item index="/service/other">🤝 其他合作</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_shop" index="/service/shop">🏪 店铺买卖/租赁</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_course" index="/service/course">📚 课程+陪跑</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_logistics" index="/service/logistics">📦 货代/小包/海外仓</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_software" index="/service/software">💻 增强软件</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_network" index="/service/network">🌐 网络&硬件服务</el-menu-item>
+            <el-menu-item v-if="contentConfigs.service_other" index="/service/other">🤝 其他合作</el-menu-item>
           </el-sub-menu>
         </el-menu>
 
@@ -88,7 +88,8 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu class="dark-dropdown">
-                  <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                  <el-dropdown-item command="changePassword">🔑 修改密码</el-dropdown-item>
+                  <el-dropdown-item command="logout">🚪 退出登录</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -122,14 +123,59 @@
         </el-container>
       </el-container>
     </el-container>
+
+    <!-- 修改密码对话框 -->
+    <el-dialog
+      v-model="changePasswordVisible"
+      title="修改密码"
+      width="400px"
+      class="dark-dialog"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="passwordForm" label-width="80px" :rules="passwordRules" ref="passwordFormRef">
+        <el-form-item label="旧密码" prop="oldPassword">
+          <el-input
+            v-model="passwordForm.oldPassword"
+            type="password"
+            placeholder="请输入旧密码"
+            show-password
+            class="cyber-input"
+          />
+        </el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input
+            v-model="passwordForm.newPassword"
+            type="password"
+            placeholder="请输入新密码（至少6位）"
+            show-password
+            class="cyber-input"
+          />
+        </el-form-item>
+        <el-form-item label="确认密码" prop="confirmPassword">
+          <el-input
+            v-model="passwordForm.confirmPassword"
+            type="password"
+            placeholder="请再次输入新密码"
+            show-password
+            class="cyber-input"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="changePasswordVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitChangePassword" :loading="passwordLoading">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { Document, Loading, MagicStick, Shop, Cpu } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import request from '@/api/request'
 
 const route = useRoute()
 const router = useRouter()
@@ -139,6 +185,77 @@ const isCollapse = ref(false)
 const showLogs = ref(true)
 const logs = ref([])
 const logContainer = ref(null)
+
+// 内容配置（动态菜单）
+const contentConfigs = reactive({
+  shrimp_openclaw: true,
+  shrimp_skills: true,
+  shrimp_ai_staff: true,
+  service_shop: true,
+  service_course: true,
+  service_logistics: true,
+  service_software: true,
+  service_network: true,
+  service_other: true
+})
+
+// 计算是否有启用的子菜单项
+const hasEnabledShrimpItems = computed(() =>
+  contentConfigs.shrimp_openclaw || contentConfigs.shrimp_skills || contentConfigs.shrimp_ai_staff
+)
+const hasEnabledServiceItems = computed(() =>
+  contentConfigs.service_shop || contentConfigs.service_course || contentConfigs.service_logistics ||
+  contentConfigs.service_software || contentConfigs.service_network || contentConfigs.service_other
+)
+
+// 加载内容配置
+const loadContentConfigs = async () => {
+  try {
+    const res = await request.get('/api/content-configs-enabled')
+    if (res && res.configs) {
+      Object.keys(res.configs).forEach(key => {
+        if (key in contentConfigs) {
+          contentConfigs[key] = res.configs[key]
+        }
+      })
+      // 保存到 localStorage 供路由守卫使用
+      localStorage.setItem('contentConfigs', JSON.stringify(res.configs))
+    }
+  } catch (e) {
+    // 加载失败，使用默认值（全部显示）
+    console.warn('加载内容配置失败，使用默认配置')
+  }
+}
+
+// 修改密码相关
+const changePasswordVisible = ref(false)
+const passwordLoading = ref(false)
+const passwordFormRef = ref(null)
+const passwordForm = reactive({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const validateConfirmPassword = (rule, value, callback) => {
+  if (value !== passwordForm.newPassword) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const passwordRules = {
+  oldPassword: [{ required: true, message: '请输入旧密码', trigger: 'blur' }],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码长度不能少于6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: 'blur' }
+  ]
+}
 
 // 用于追踪是否是自动收起（用户手动收起时不应该自动展开）
 const autoCollapsedLog = ref(false)
@@ -175,6 +292,8 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   // 初始检查
   handleResize()
+  // 加载内容配置
+  loadContentConfigs()
 })
 
 onUnmounted(() => {
@@ -201,6 +320,37 @@ const handleCommand = (command) => {
   if (command === 'logout') {
     userStore.logout()
     router.push('/login')
+  } else if (command === 'changePassword') {
+    changePasswordVisible.value = true
+    // 重置表单
+    passwordForm.oldPassword = ''
+    passwordForm.newPassword = ''
+    passwordForm.confirmPassword = ''
+  }
+}
+
+const submitChangePassword = async () => {
+  if (!passwordFormRef.value) return
+
+  try {
+    await passwordFormRef.value.validate()
+  } catch {
+    return
+  }
+
+  passwordLoading.value = true
+  try {
+    await request.post('/auth/change-password', {
+      old_password: passwordForm.oldPassword,
+      new_password: passwordForm.newPassword
+    })
+    ElMessage.success('密码修改成功')
+    changePasswordVisible.value = false
+  } catch (e) {
+    const msg = e.response?.data?.detail || '密码修改失败'
+    ElMessage.error(msg)
+  } finally {
+    passwordLoading.value = false
   }
 }
 </script>
@@ -508,6 +658,30 @@ const handleCommand = (command) => {
 }
 .dark-dropdown .el-dropdown-menu__item:hover {
   background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+/* 暗色对话框 */
+.dark-dialog .el-dialog {
+  background: rgba(20, 20, 30, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+}
+.dark-dialog .el-dialog__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.dark-dialog .el-dialog__title {
+  color: #e2e8f0 !important;
+}
+.dark-dialog .el-form-item__label {
+  color: #a0aec0 !important;
+}
+.dark-dialog .el-input__wrapper {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: none !important;
+}
+.dark-dialog .el-input__inner {
   color: #fff !important;
 }
 </style>

@@ -168,53 +168,102 @@ ${formatParts.join('\n\n')}
 /**
  * 生成视频
  * @param {object} data - { model, prompt, duration, ratio, resolution, images }
+ * @param {object} modelConfig - 可选的模型配置（包含 request_mapping）
  */
-export const generateVideo = (data) => {
+export const generateVideo = (data, modelConfig = null) => {
   const { model, prompt, duration, ratio, resolution, images } = data
 
-  // 根据模型构建不同的请求体
+  // 基础 payload
   const payload = {
     model,
     prompt
   }
 
-  // 比例处理
-  const aspectRatio = ratio || '9:16'
-  if (model === 'grok-video-3') {
-    payload.ratio = aspectRatio
-  } else {
-    payload.aspect_ratio = aspectRatio
-    payload.private = true
-  }
+  // 如果有模型配置，使用 request_mapping 动态构建
+  if (modelConfig?.request_mapping) {
+    const mapping = modelConfig.request_mapping
+    const dynamicParams = mapping.dynamic_params || {}
+    const staticParams = mapping.static_params || {}
+    const valueTransformations = mapping.value_transformations || {}
 
-  // 🚨 修复 1：智能时长映射 (Sora 强校验 4, 8, 12)
-  const dur = parseInt(duration || 10, 10)
-  if (model === 'grok-video-3') {
-    // grok 接受数字
-    payload.duration = dur
-  } else if (model.includes('sora')) {
-    // sora 只能接受指定的字符串秒数，我们做个向下兼容映射
-    if (dur <= 5) {
-      payload.duration = '4'
-    } else if (dur <= 10) {
-      payload.duration = '8'
-    } else {
-      payload.duration = '12'
+    // 处理动态参数映射
+    for (const [targetField, sourceField] of Object.entries(dynamicParams)) {
+      if (sourceField === 'model') payload[targetField] = model
+      else if (sourceField === 'prompt') payload[targetField] = prompt
+      else if (sourceField === 'duration') {
+        // 时长处理
+        const dur = parseInt(duration || 10, 10)
+        if (model === 'grok-video-3') {
+          payload[targetField] = dur
+        } else if (model.includes('sora')) {
+          // Sora 只接受 4, 8, 12
+          if (dur <= 5) payload[targetField] = '4'
+          else if (dur <= 10) payload[targetField] = '8'
+          else payload[targetField] = '12'
+        } else {
+          payload[targetField] = String(dur)
+        }
+      }
+      else if (sourceField === 'aspect_ratio') {
+        // 比例映射
+        payload[targetField] = ratio || '9:16'
+      }
+      else if (sourceField === 'ratio') {
+        // Grok 用 ratio 字段
+        payload[targetField] = ratio || '1:1'
+      }
+      else if (sourceField === 'resolution') {
+        // 检查是否有转换规则
+        const transform = valueTransformations?.[sourceField]
+        if (transform?.transform) {
+          // 执行转换表达式，如 "resolution === '1080P'"
+          payload[transform.target_field || targetField] = (resolution === '1080P')
+        } else {
+          // 直接传递 resolution 值（Grok 模式）
+          payload[targetField] = resolution || '720P'
+        }
+      }
+      else if (sourceField === 'hd') {
+        payload[targetField] = (resolution === '1080P')
+      }
+      else if (sourceField === 'images' && images?.length > 0) {
+        payload[targetField] = [images[0]]
+      }
     }
+
+    // 添加静态参数
+    Object.assign(payload, staticParams)
+
   } else {
-    // 其他模型默认传字符串
-    payload.duration = String(dur)
+    // 无配置时使用默认逻辑（向后兼容）
+    const aspectRatio = ratio || '9:16'
+    payload.aspect_ratio = aspectRatio
+
+    if (model !== 'grok-video-3') {
+      payload.private = true
+    }
+
+    const dur = parseInt(duration || 10, 10)
+    if (model === 'grok-video-3') {
+      payload.duration = dur
+      payload.ratio = aspectRatio
+      payload.resolution = resolution || '720P'
+    } else if (model.includes('sora')) {
+      if (dur <= 5) payload.duration = '4'
+      else if (dur <= 10) payload.duration = '8'
+      else payload.duration = '12'
+    } else {
+      payload.duration = String(dur)
+    }
+
+    payload.hd = (resolution === '1080P')
+
+    if (images && images.length > 0) {
+      payload.images = [images[0]]
+    }
   }
 
-  // 分辨率处理
-  payload.hd = (resolution === '1080P')
-
-  // 参考图
-  if (images && images.length > 0) {
-    payload.images = [images[0]]
-  }
-
-  // 🚨 修复 2：将超时时间从 60 秒延长到 3 分钟 (180000ms)，给 Grok 充足的缓冲时间
+  // 将超时时间延长到 3 分钟
   return callAI(
     AI_ENDPOINTS.GENERATE_VIDEO.placeholder,
     AI_ENDPOINTS.GENERATE_VIDEO.url,
@@ -437,5 +486,155 @@ export const planImagePrompts = (data) => {
       temperature: 0.7
     },
     { timeout: 180000 }
+  )
+}
+
+// ==========================================
+// 视频脚本生成 - 硬编码功能逻辑 + 可配置 system_instruction
+// ==========================================
+
+// 语言映射字典（硬编码）
+const VIDEO_LANG_MAP = {
+  "中文": "Chinese", "简体中文": "Simplified Chinese", "繁体中文": "Traditional Chinese",
+  "英语": "English", "英文": "English", "日语": "Japanese", "日文": "Japanese",
+  "韩语": "Korean", "韩文": "Korean", "法语": "French", "德语": "German",
+  "俄语": "Russian", "西班牙语": "Spanish", "葡萄牙语": "Portuguese", "意大利语": "Italian",
+  "阿拉伯语": "Arabic", "越南语": "Vietnamese", "泰语": "Thai",
+  "印尼语": "Indonesian", "马来语": "Malay"
+}
+
+// 地区映射（硬编码）
+const VIDEO_REGION_MAP = {
+  "非洲": "Environment: Vibrant African urban setting. Character: Local African influencer.",
+  "东南亚": "Environment: Southeast Asian home setting. Character: Southeast Asian influencer.",
+  "欧美": "Environment: Modern Western apartment. Character: Caucasian influencer.",
+  "中东": "Environment: Luxurious modern home. Character: Middle Eastern influencer.",
+  "日韩": "Environment: Clean Japanese/Korean apartment. Character: Asian influencer.",
+  "中国": "Environment: Modern Chinese apartment. Character: Chinese influencer.",
+  "南美": "Environment: Vibrant Latin American home. Character: Latin American influencer."
+}
+
+// 默认的 system_instruction 模板（当后台没配置时使用）
+const DEFAULT_VIDEO_SCRIPT_PROMPT = `You are an expert AI Video Director for E-commerce.
+Task: Write a structured video prompt for Sora.
+
+CONTEXT:
+- {text_instruction}
+- Region: {region}
+- Style: {style}
+- Category: {category}
+
+MANDATORY FORMAT:
+[Type]: {style} Video
+[Structure]: Hook -> Demo -> Benefit -> CTA
+{region_prompt}
+
+[Actions]:
+- (Scene 1: Hook) Opening. Dialogue in {target_lang}: "..."
+- (Scene 2: Demo) Action.
+{overlay_action}
+- (Scene 4: CTA) Presenter recommending. Dialogue in {target_lang}: "..."
+
+[Camera]: ...
+[Sound]: ...`
+
+/**
+ * 获取字幕控制配置（硬编码逻辑）
+ */
+function getSubtitleConfig(hasSubtitles, targetLang) {
+  if (hasSubtitles) {
+    return {
+      textInstruction: `Target Language: ${targetLang}. Text must be Huge, Bold.`,
+      overlayAction: `- (Scene 3: Detail) Close-up. Overlay huge bold text in ${targetLang}: '...'`,
+      outputReq: `- Ensure Text Overlays are in target language.`
+    }
+  } else {
+    return {
+      textInstruction: "NO TEXT OVERLAYS. Pure visual.",
+      overlayAction: "- (Scene 3: Detail) Close-up emphasizing texture. (NO TEXT).",
+      outputReq: "- ABSOLUTELY NO TEXT OVERLAYS."
+    }
+  }
+}
+
+/**
+ * 获取地区提示词（硬编码逻辑）
+ */
+function getRegionPrompt(region) {
+  return VIDEO_REGION_MAP[region] || VIDEO_REGION_MAP['日韩']
+}
+
+/**
+ * 生成视频脚本
+ * @param {object} data - { images, product_type, selling_points, style, language, region, category, subtitle, custom_system_prompt }
+ * @param {string} customSystemPrompt - 可选的自定义 system_instruction（从后台配置读取）
+ */
+export const generateVideoScript = (data, customSystemPrompt = '') => {
+  const { images, product_type, selling_points, style, language, region, category, subtitle } = data
+
+  // 1. 语言映射
+  const langKey = (language || '英语').substring(0, 2)
+  const targetLang = VIDEO_LANG_MAP[language] || VIDEO_LANG_MAP[langKey] || 'English'
+
+  // 2. 地区映射
+  const regionPrompt = getRegionPrompt(region)
+
+  // 3. 字幕控制
+  const hasSubtitles = subtitle !== false && subtitle !== 'false'
+  const subtitleConfig = getSubtitleConfig(hasSubtitles, targetLang)
+
+  // 4. 获取 system_instruction（优先使用自定义，否则用默认）
+  let systemInstruction = customSystemPrompt || DEFAULT_VIDEO_SCRIPT_PROMPT
+
+  // 5. 替换占位符
+  systemInstruction = systemInstruction
+    .replace(/{target_lang}/g, targetLang)
+    .replace(/{region}/g, region || '日韩')
+    .replace(/{region_prompt}/g, regionPrompt)
+    .replace(/{style}/g, style || 'UGC 种草')
+    .replace(/{category}/g, category || 'General')
+    .replace(/{text_instruction}/g, subtitleConfig.textInstruction)
+    .replace(/{overlay_action}/g, subtitleConfig.overlayAction)
+    .replace(/{output_req}/g, subtitleConfig.outputReq)
+
+  // 6. 构建用户请求
+  const userReq = `Input:
+Product: ${product_type || '通用产品'}
+Selling Points: ${selling_points || ''}
+
+Instruction:
+Write a video script in English description but ${targetLang} dialogue/text.
+${subtitleConfig.outputReq}`
+
+  // 7. 构建消息内容
+  const userContent = [{ type: 'text', text: userReq }]
+
+  // 8. 添加参考图片
+  const validImages = (images || []).filter(img => img).slice(0, 1)
+  for (const imgBase64 of validImages) {
+    let imgUrl = imgBase64
+    if (!imgBase64.startsWith('data:image')) {
+      imgUrl = `data:image/jpeg;base64,${imgBase64}`
+    }
+    userContent.push({
+      type: 'image_url',
+      image_url: { url: imgUrl }
+    })
+  }
+
+  // 9. 调用 ModelScope API
+  return callAI(
+    AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
+    AI_ENDPOINTS.ANALYZE_IMAGES.url,
+    {
+      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      messages: [
+        { role: 'system', content: systemInstruction },
+        { role: 'user', content: userContent }
+      ],
+      max_tokens: 1500,
+      temperature: 0.7
+    },
+    { timeout: 120000 }
   )
 }

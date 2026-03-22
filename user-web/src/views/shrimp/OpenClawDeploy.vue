@@ -68,7 +68,7 @@ const defaultCards = [
     title: 'OpenClaw',
     icon: '🦐',
     description: '开源版 AI 智能体框架，支持多模型接入，适合技术团队二次开发',
-    price: '¥199起',
+    price: '¥499起',
     tags: ['开源', '可定制']
   },
   {

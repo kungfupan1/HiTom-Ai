@@ -80,7 +80,7 @@
                   :src="item.previewUrl"
                   class="preview-video"
                   preload="metadata"
-                  @click.stop="openVideoFullscreen"
+                  @click.stop="openVideoPreview(item.previewUrl)"
                   muted
                 />
               </template>
@@ -146,6 +146,22 @@
           <img :src="imagePreviewUrl" class="fullscreen-image" @click.stop />
         </div>
       </transition>
+
+      <!-- 全窗口视频预览 -->
+      <transition name="fade">
+        <div v-if="videoPreviewVisible" class="fullscreen-preview" @click="closeVideoPreview">
+          <div class="preview-close-btn" @click="closeVideoPreview">
+            <el-icon><Close /></el-icon>
+          </div>
+          <video
+            :src="videoPreviewUrl"
+            controls
+            autoplay
+            class="fullscreen-video"
+            @click.stop
+          ></video>
+        </div>
+      </transition>
     </Teleport>
   </div>
 </template>
@@ -177,6 +193,10 @@ const totalPages = ref(0)
 // 全窗口图片预览状态
 const imagePreviewVisible = ref(false)
 const imagePreviewUrl = ref('')
+
+// 全窗口视频预览状态
+const videoPreviewVisible = ref(false)
+const videoPreviewUrl = ref('')
 
 // 根据传入的 fixedType 确定查询类型
 const queryType = props.fixedType || ''
@@ -346,17 +366,17 @@ const closeImagePreview = () => {
   document.body.style.overflow = ''
 }
 
-// 视频全屏播放
-const openVideoFullscreen = (e) => {
-  const video = e.target
-  if (video.requestFullscreen) {
-    video.requestFullscreen()
-  } else if (video.webkitRequestFullscreen) {
-    video.webkitRequestFullscreen()
-  } else if (video.msRequestFullscreen) {
-    video.msRequestFullscreen()
-  }
-  video.play()
+// 打开视频预览
+const openVideoPreview = (url) => {
+  videoPreviewUrl.value = url
+  videoPreviewVisible.value = true
+  document.body.style.overflow = 'hidden'
+}
+
+// 关闭视频预览
+const closeVideoPreview = () => {
+  videoPreviewVisible.value = false
+  document.body.style.overflow = ''
 }
 
 // 暴露方法给父组件
@@ -576,7 +596,7 @@ onMounted(() => {
 .preview-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
 }
 
@@ -666,7 +686,7 @@ onMounted(() => {
 
 /* 图片预览遮罩层适配 */
 :deep(.el-image-viewer__wrapper) {
-  background: rgba(0, 0, 0, 0.95);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 9999 !important;
 }
 
@@ -683,7 +703,7 @@ onMounted(() => {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.95);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 99999;
   display: flex;
   align-items: center;
@@ -697,6 +717,14 @@ onMounted(() => {
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+}
+
+.fullscreen-video {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
 }
 
 .preview-close-btn {

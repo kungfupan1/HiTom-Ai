@@ -1,27 +1,30 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
+// Element Plus 样式
 import 'element-plus/dist/index.css'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
 import { useUserStore } from './stores/user'
+import { registerIcons } from './plugins/icons'
 
 const app = createApp(App)
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
+// 注册常用图标
+registerIcons(app)
 
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
 
 // 初始化用户状态
 const userStore = useUserStore()
 userStore.init()
 
 app.mount('#app')
+
+// 隐藏首屏加载提示
+const loadingEl = document.getElementById('app-loading')
+if (loadingEl) {
+  loadingEl.classList.add('fade-out')
+  setTimeout(() => loadingEl.remove(), 300)
+}

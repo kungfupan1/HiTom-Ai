@@ -1,6 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 
+// 内容配置 key 和路由 path 的映射
+const contentConfigRouteMap = {
+  '/shrimp/openclaw': 'shrimp_openclaw',
+  '/shrimp/skills': 'shrimp_skills',
+  '/shrimp/ai-staff': 'shrimp_ai_staff',
+  '/service/shop': 'service_shop',
+  '/service/course': 'service_course',
+  '/service/logistics': 'service_logistics',
+  '/service/software': 'service_software',
+  '/service/network': 'service_network',
+  '/service/other': 'service_other'
+}
+
 const routes = [
   {
     path: '/login',
@@ -17,9 +30,8 @@ const routes = [
   {
     path: '/',
     component: () => import('@/layout/MainLayout.vue'),
-    redirect: '/ai/image',
+    redirect: '/ai/video',
     children: [
-      // AI 制图智能体
       {
         path: 'ai/image',
         name: 'ImageTool',
@@ -35,10 +47,9 @@ const routes = [
       {
         path: 'ai/video/general',
         name: 'GeneralVideoTool',
-        component: () => import('@/views/service/ComingSoon.vue'),
+        component: () => import('@/views/ai/GeneralVideoTool.vue'),
         meta: { title: '普通视频生成' }
       },
-      // 跨境服务资源
       {
         path: 'service/shop',
         name: 'ServiceShop',
@@ -75,7 +86,6 @@ const routes = [
         component: () => import('@/views/service/ComingSoon.vue'),
         meta: { title: '其他合作' }
       },
-      // 云端养虾
       {
         path: 'shrimp/openclaw',
         name: 'ShrimpOpenClaw',
@@ -103,15 +113,39 @@ const router = createRouter({
   routes
 })
 
+// 获取内容配置启用状态
+function isContentEnabled(path) {
+  const configKey = contentConfigRouteMap[path]
+  if (!configKey) return true // 非内容配置页面，放行
+
+  // 从 localStorage 获取配置
+  try {
+    const configs = JSON.parse(localStorage.getItem('contentConfigs') || '{}')
+    // 如果没有配置，默认启用
+    return configs[configKey] !== false
+  } catch {
+    return true
+  }
+}
+
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
 
+  // 检查登录状态
   if (!['/login', '/register'].includes(to.path) && !userStore.isLoggedIn) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  // 检查内容配置启用状态
+  if (!isContentEnabled(to.path)) {
+    // 跳转到首页
+    next('/ai/image')
+    return
+  }
+
+  next()
 })
 
 export default router

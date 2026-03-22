@@ -19,6 +19,9 @@ class User(Base):
     points = Column(Integer, default=0)
     is_active = Column(Integer, default=1)  # 1=正常, 0=封号
     role = Column(String(20), default="user")  # user/admin
+    # 登录失败限制
+    login_fail_count = Column(Integer, default=0)  # 连续登录失败次数
+    locked_until = Column(DateTime, nullable=True)  # 锁定到期时间
     create_time = Column(DateTime, default=datetime.now)
 
 

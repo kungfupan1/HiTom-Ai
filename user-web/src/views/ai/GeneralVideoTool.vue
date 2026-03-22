@@ -5,7 +5,7 @@
         <el-card class="cyber-glass" shadow="never">
           <template #header>
             <div class="card-header">
-              <span class="gradient-text">🎬 视频生成控制台</span>
+              <span class="gradient-text">🎬 普通视频生成</span>
               <el-tag effect="dark" round color="#ff0055" style="border:none; box-shadow: 0 0 10px rgba(255,0,85,0.4)">{{ currentModel?.config_schema?.model_info?.display_name || currentModel?.display_name || 'AI视频' }}</el-tag>
             </div>
           </template>
@@ -18,8 +18,8 @@
               </el-select>
             </el-form-item>
 
-            <!-- ===== 动态渲染 UI Schema ===== -->
-            <template v-for="field in uiSchema" :key="field.field_name">
+            <!-- ===== 动态渲染 UI Schema（带排除逻辑）===== -->
+            <template v-for="field in filteredUiSchema" :key="field.field_name">
               <!-- 跳过模型ID字段，已在上方显示 -->
               <template v-if="field.field_name !== 'model' && field.field_name !== 'images'">
                 <!-- input 类型 -->
@@ -31,43 +31,31 @@
                   />
                 </el-form-item>
 
-                <!-- textarea 类型 (核心卖点) -->
-                <template v-else-if="field.ui_type === 'textarea'">
-                  <div class="label-box">
-                    <span class="label-text">{{ field.label }}{{ field.required ? ' (必填)' : '' }}</span>
-                    <el-tooltip v-if="field.field_name === 'selling_points'" content="请先在下方上传图片，然后点击此按钮" placement="top" :disabled="fileList.length > 0">
-                      <el-button type="primary" plain round size="small" class="optimize-btn" @click="analyzeImages" :loading="analyzing" :disabled="fileList.length === 0">
-                        {{ analyzing ? '正在分析...' : '✨ 看图自动生成文案' }}
-                      </el-button>
-                    </el-tooltip>
-                  </div>
-                  <el-form-item>
-                    <el-input
-                      v-model="dynamicFormData[field.field_name]"
-                      type="textarea"
-                      :rows="field.rows || 6"
-                      :placeholder="field.placeholder || ''"
-                      resize="none"
-                      :maxlength="field.max_length || 5000"
-                      show-word-limit
-                      class="cyber-input"
-                    />
-                  </el-form-item>
-                </template>
+                <!-- textarea 类型（视频提示词） -->
+                <el-form-item v-else-if="field.ui_type === 'textarea'" :label="field.label + (field.required ? ' (必填)' : '')">
+                  <el-input
+                    v-model="dynamicFormData[field.field_name]"
+                    type="textarea"
+                    :rows="field.rows || 6"
+                    :placeholder="field.placeholder || ''"
+                    resize="none"
+                    :maxlength="field.max_length || 5000"
+                    show-word-limit
+                    class="cyber-input"
+                  />
+                </el-form-item>
               </template>
             </template>
 
-            <!-- 参考图片上传 (紧跟核心卖点下方) -->
-            <el-form-item label="参考图片 (最多5张，支持拖拽)">
+            <!-- 参考图片上传 -->
+            <el-form-item label="参考图片 (可选，最多1张)">
               <el-upload
                 action="#"
                 list-type="picture-card"
                 :auto-upload="false"
-                :limit="5"
+                :limit="1"
                 :on-change="handleFileChange"
                 :on-remove="handleRemove"
-                multiple
-                drag
                 class="cyber-upload"
               >
                 <el-icon><Plus /></el-icon>
@@ -204,9 +192,9 @@
 
 <script setup>
 import { Plus, Close } from '@element-plus/icons-vue'
-import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, onUnmounted } from 'vue'
 import request from '@/api/request'
-import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI, generateVideoScript, getPricingInfo } from '@/api/index'
+import { generateVideo, getVideoStatus, getPricingInfo } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import HistoryPanel from '@/components/HistoryPanel.vue'
@@ -224,7 +212,6 @@ const videoPlayerRef = ref(null)
 
 // ========== 状态 ==========
 const loading = ref(false)
-const analyzing = ref(false)
 const taskId = ref('')
 const taskStatus = ref('')
 const progress = ref(0)
@@ -232,7 +219,6 @@ const videoUrl = ref('')
 const fileList = ref([])
 const imageBase64List = ref([])
 const currentDeductionId = ref(null)
-const videoScriptPrompt = ref('')  // 视频脚本提示词配置
 
 // ========== 视频预览弹窗 ==========
 const videoPreviewVisible = ref(false)
@@ -245,14 +231,26 @@ const selectedModelId = ref('')
 // ========== 动态表单数据 ==========
 const dynamicFormData = reactive({})
 
-// 计算属性：UI Schema
-const uiSchema = computed(() => {
-  return currentModel.value?.config_schema?.ui_schema || []
+// ===== 排除字段列表（带货专属，不在此页面显示）=====
+const EXCLUDED_FIELDS = [
+  'product_type',    // 产品类型
+  'style',           // 风格
+  'language',        // 语言
+  'region',          // 地区
+  'category',        // 类目
+  'subtitle'         // 字幕
+  // 注意：selling_points 保留，作为视频提示词输入框
+]
+
+// 计算属性：过滤后的 UI Schema（排除带货专属字段）
+const filteredUiSchema = computed(() => {
+  const schema = currentModel.value?.config_schema?.ui_schema || []
+  return schema.filter(field => !EXCLUDED_FIELDS.includes(field.field_name))
 })
 
 // 计算属性：选项类型字段（select、input-number），用于一行2个布局
 const optionFields = computed(() => {
-  return uiSchema.value.filter(f =>
+  return filteredUiSchema.value.filter(f =>
     f.field_name !== 'model' &&
     f.field_name !== 'images' &&
     (f.ui_type === 'select' || f.ui_type === 'input-number' || f.ui_type === 'switch')
@@ -278,8 +276,8 @@ const pricingDescription = computed(() => {
 const costInfo = ref({ cost: 0, breakdown: null })
 
 const canGenerate = computed(() => {
-  // 检查必填字段
-  const requiredFields = uiSchema.value.filter(f => f.required).map(f => f.field_name)
+  // 检查必填字段（只检查过滤后的字段）
+  const requiredFields = filteredUiSchema.value.filter(f => f.required).map(f => f.field_name)
   const hasAllRequired = requiredFields.every(f => dynamicFormData[f])
   return selectedModelId.value && hasAllRequired && costInfo.value.cost > 0
 })
@@ -287,14 +285,8 @@ const canGenerate = computed(() => {
 // ========== 加载模型 ==========
 const loadModels = async () => {
   try {
-    // 并行加载模型列表和系统配置
-    const [res, config] = await Promise.all([
-      request.get('/api/models?model_type=video'),
-      getPricingInfo()
-    ])
-
+    const res = await request.get('/api/models?model_type=video')
     models.value = res
-    videoScriptPrompt.value = config.video_script_prompt || ''
 
     if (res.length > 0) {
       selectedModelId.value = res[0].model_id
@@ -325,22 +317,22 @@ const onModelChange = async () => {
 
     // ===== 防呆逻辑：检查旧值是否在新 options 内 =====
     schema.forEach(field => {
+      // 跳过排除字段
+      if (EXCLUDED_FIELDS.includes(field.field_name)) return
+
       const oldValue = dynamicFormData[field.field_name]
 
       if (field.ui_type === 'select' && field.options) {
         const validValues = field.options.map(o => o.value)
         if (oldValue === undefined || !validValues.includes(oldValue)) {
-          // 不合法，覆盖为默认值
           dynamicFormData[field.field_name] = field.default_value ?? validValues[0]
         }
       } else if (field.ui_type === 'input-number') {
-        // 数字类型校验
         const num = Number(oldValue)
         if (isNaN(num) || num < (field.min || 1) || num > (field.max || 10)) {
           dynamicFormData[field.field_name] = field.default_value ?? field.min ?? 1
         }
       } else {
-        // 其他类型直接使用默认值
         if (oldValue === undefined) {
           dynamicFormData[field.field_name] = field.default_value ?? ''
         }
@@ -368,7 +360,6 @@ const calculateCost = async () => {
     costInfo.value = res
   } catch (e) {
     console.error('计算费用失败', e)
-    // 使用 config_schema 中的计费规则
     const pricingRules = currentModel.value?.config_schema?.pricing_rules
     if (pricingRules?.mode === 'fixed') {
       costInfo.value = { cost: pricingRules.fixed_cost || 0 }
@@ -406,48 +397,13 @@ const convertImagesToBase64 = async () => {
   }
 }
 
-// ========== 图片分析 ==========
-const analyzeImages = async () => {
-  if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传图片')
-  analyzing.value = true
-  emit('log', '开始分析图片...')
-
-  try {
-    // 通过腾讯云函数代理调用 ModelScope
-    const res = await analyzeImagesAPI({
-      images: imageBase64List.value,
-      product_type: dynamicFormData.product_type || '通用产品',
-      design_style: dynamicFormData.style || '简约风格',
-      target_lang: dynamicFormData.language || '中文',
-      target_num: 1
-    })
-
-    // 解析响应
-    const content = res.choices?.[0]?.message?.content || ''
-    if (content) {
-      dynamicFormData.selling_points = content
-      ElMessage.success('文案生成成功！')
-      emit('log', '文案生成成功！')
-    } else {
-      ElMessage.error('分析失败: 响应格式错误')
-      emit('log', '分析失败: 响应格式错误')
-    }
-  } catch (e) {
-    console.error('分析失败', e)
-    ElMessage.error('分析失败: ' + (e.message || '未知错误'))
-    emit('log', '分析失败: ' + (e.message || '未知错误'))
-  } finally {
-    analyzing.value = false
-  }
-}
-
-// ========== 提交任务 ==========
+// ========== 提交任务（简化版：直接使用 prompt，不生成脚本）==========
 const submitTask = async () => {
-  // 检查必填字段
-  const requiredFields = uiSchema.value.filter(f => f.required).map(f => f.field_name)
+  // 检查必填字段（只检查过滤后的字段）
+  const requiredFields = filteredUiSchema.value.filter(f => f.required).map(f => f.field_name)
   for (const f of requiredFields) {
     if (!dynamicFormData[f]) {
-      return ElMessage.warning(`请填写 ${uiSchema.value.find(u => u.field_name === f)?.label || f}`)
+      return ElMessage.warning(`请填写 ${filteredUiSchema.value.find(u => u.field_name === f)?.label || f}`)
     }
   }
 
@@ -483,42 +439,22 @@ const submitTask = async () => {
     currentDeductionId.value = reserveRes.deduction_id
     emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
 
-    // 步骤2: 调用 AI 生成视频脚本
-    emit('log', '步骤2: 调用 AI 生成视频脚本...')
+    // 步骤2: 直接调用视频生成 API（跳过脚本生成，直接用 prompt）
+    emit('log', `步骤2: 调用 ${selectedModelId.value} 生成视频...`)
 
-    const scriptData = {
-      images: imageBase64List.value,
-      product_type: dynamicFormData.product_type,
-      selling_points: dynamicFormData.selling_points,
-      style: dynamicFormData.style,
-      language: dynamicFormData.language,
-      region: dynamicFormData.region,
-      category: dynamicFormData.category,
-      subtitle: dynamicFormData.subtitle !== false
-    }
+    // 从动态表单中获取 prompt 字段（可能是 prompt 或其他名称）
+    const promptField = filteredUiSchema.value.find(f => f.ui_type === 'textarea')
+    const finalPrompt = promptField ? dynamicFormData[promptField.field_name] : ''
+    emit('log', `提示词: ${finalPrompt.substring(0, 100)}...`)
 
-    const scriptRes = await generateVideoScript(scriptData, videoScriptPrompt.value)
-    const videoScript = scriptRes?.choices?.[0]?.message?.content || ''
-
-    if (!videoScript) {
-      throw new Error('视频脚本生成失败，请重试')
-    }
-
-    // 打印生成的脚本到日志窗口
-    emit('log', '===== AI 生成的视频脚本 =====')
-    emit('log', videoScript)
-    emit('log', '=============================')
-
-    // 步骤3: 调用视频生成 API
-    emit('log', `步骤3: 调用 ${selectedModelId.value} 生成视频...`)
     const videoRes = await generateVideo({
       model: selectedModelId.value,
-      prompt: videoScript,  // 使用 AI 生成的脚本作为 prompt
+      prompt: finalPrompt,  // 直接使用用户输入的提示词
       duration: dynamicFormData.duration,
       ratio: dynamicFormData.aspect_ratio,
       resolution: dynamicFormData.resolution,
       images: imageBase64List.value
-    }, currentModel.value?.config_schema)  // 传入模型配置，使用 request_mapping
+    }, currentModel.value?.config_schema)
 
     const actualTaskId = videoRes?.data?.task_id || videoRes?.task_id
     if (!actualTaskId) throw new Error('未获取到任务ID')
@@ -526,14 +462,14 @@ const submitTask = async () => {
     taskId.value = actualTaskId
     emit('log', `任务已提交，task_id: ${taskId.value}`)
 
-    // 步骤4: 确认扣费
+    // 步骤3: 确认扣费
     await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
     emit('log', '积分扣费已确认')
 
     userStore.refreshPoints()
     emit('refresh-points')
 
-    // 步骤5: 开始轮询
+    // 步骤4: 开始轮询
     emit('log', '开始轮询生成状态...')
     startStatusPolling()
 
@@ -556,7 +492,7 @@ const submitTask = async () => {
   }
 }
 
-// ========== 状态轮询（使用 response_mapping 解析）==========
+// ========== 状态轮询 ==========
 let statusTimer = null
 let errorCount = 0
 
@@ -571,13 +507,11 @@ const startStatusPolling = () => {
     try {
       const res = await getVideoStatus(taskId.value, selectedModelId.value)
 
-      // ===== 使用 response_mapping 提取状态 =====
       const statusPath = responseMapping.status_path || 'status'
       const progressPath = responseMapping.progress_path || 'progress'
       const resultUrlPath = responseMapping.result_url_path || 'data.output'
       const errorPath = responseMapping.error_path || 'fail_reason'
 
-      // 解析 JSON Path
       const apiStatus = getJsonValue(res, statusPath) || 'pending'
       const rawStatus = String(apiStatus).toLowerCase()
       const errMsg = getJsonValue(res, errorPath) || '未知错误'
@@ -585,7 +519,6 @@ const startStatusPolling = () => {
 
       progress.value = Math.min(99, parseInt(prog))
 
-      // 状态映射
       const statusMapping = responseMapping.status_mapping || {
         success: ['success', 'completed', 'succeeded'],
         processing: ['processing', 'pending', 'running'],
@@ -660,13 +593,10 @@ const startStatusPolling = () => {
 // JSON Path 解析工具
 const getJsonValue = (obj, path) => {
   if (!path || !obj) return null
-
-  // 处理简单的点分隔路径，如 "data.output"
   const keys = path.split('.')
   let value = obj
 
   for (const key of keys) {
-    // 处理数组索引，如 "data[0].url"
     const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
     if (arrayMatch) {
       const [, arrKey, index] = arrayMatch
@@ -706,8 +636,9 @@ const closeVideoPreview = () => {
 // ========== 保存历史记录 ==========
 const saveHistory = async (resultUrl) => {
   try {
-    // 构建 prompt 摘要
-    const promptSummary = `产品: ${dynamicFormData.product_type || ''}\n卖点: ${dynamicFormData.selling_points?.substring(0, 100) || ''}`
+    // 从动态表单中获取 prompt 字段
+    const promptField = filteredUiSchema.value.find(f => f.ui_type === 'textarea')
+    const promptSummary = promptField ? dynamicFormData[promptField.field_name]?.substring(0, 200) : ''
 
     await request.post('/api/history', {
       task_type: 'video',
@@ -732,7 +663,6 @@ const saveHistory = async (resultUrl) => {
     emit('log', '历史记录已保存')
   } catch (e) {
     console.error('保存历史记录失败', e)
-    // 不影响用户体验，静默失败
   }
 }
 
@@ -823,13 +753,6 @@ onUnmounted(() => {
 
 .neon-btn { background: linear-gradient(90deg, #7f00ff, #e100ff) !important; border: none; box-shadow: 0 4px 15px rgba(127, 0, 255, 0.4); color: #fff; }
 .neon-btn:hover { opacity: 0.9; }
-.optimize-btn {
-  background: transparent !important;
-  border: 1px solid #e6a23c !important;
-  color: #e6a23c !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-}
 .cyber-action-btn { background: rgba(0, 242, 96, 0.2) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
 
 /* 费用说明 */
