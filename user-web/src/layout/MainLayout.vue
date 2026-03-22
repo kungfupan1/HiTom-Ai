@@ -24,7 +24,7 @@
             </template>
             <el-menu-item index="/ai/image">🎨 商品图生成</el-menu-item>
             <el-menu-item index="/ai/video">🎬 带货视频生成</el-menu-item>
-            <el-menu-item index="/ai/video/general">✨ 普通视频生成</el-menu-item>
+            <el-menu-item index="/ai/video/general">✨ 手动视频生成</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="shrimp" v-if="hasEnabledShrimpItems">

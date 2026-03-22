@@ -368,14 +368,34 @@ const calculateCost = async () => {
     costInfo.value = res
   } catch (e) {
     console.error('计算费用失败', e)
-    // 使用 config_schema 中的计费规则
+    // 使用 config_schema 中的计费规则（简化版备用逻辑）
     const pricingRules = currentModel.value?.config_schema?.pricing_rules
-    if (pricingRules?.mode === 'fixed') {
-      costInfo.value = { cost: pricingRules.fixed_cost || 0 }
-    } else if (pricingRules?.mode === 'dynamic') {
-      const duration = dynamicFormData.duration || 10
-      const durationPricing = pricingRules.duration_pricing || {}
-      costInfo.value = { cost: durationPricing[String(duration)] || pricingRules.unit_price * duration || 0 }
+    if (pricingRules?.mode === 'dynamic') {
+      // 动态加价模式: base_price + add_price
+      let total = pricingRules.base_price || 0
+      const addPrice = pricingRules.add_price || {}
+
+      // 时长加价
+      const duration = dynamicFormData.duration
+      if (addPrice.duration && duration) {
+        total += addPrice.duration[String(duration)] || 0
+      }
+      // 分辨率加价
+      const resolution = dynamicFormData.resolution
+      if (addPrice.resolution && resolution) {
+        total += addPrice.resolution[resolution] || 0
+      }
+      // 比例加价
+      const aspectRatio = dynamicFormData.aspect_ratio
+      if (addPrice.aspect_ratio && aspectRatio) {
+        total += addPrice.aspect_ratio[aspectRatio] || 0
+      }
+
+      costInfo.value = { cost: total }
+    } else {
+      // 固定价格模式: fixed_price
+      const fixedPrice = pricingRules?.fixed_price || 0
+      costInfo.value = { cost: fixedPrice }
     }
   }
 }

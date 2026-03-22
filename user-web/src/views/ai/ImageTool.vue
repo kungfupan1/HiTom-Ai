@@ -19,7 +19,7 @@
                   :class="{ active: activeTab === 'regenerate' }"
                   @click="activeTab = 'regenerate'"
                 >
-                  🖌️ 图片再生成
+                  🖌️ 图片再编辑
                 </div>
               </div>
             </div>
@@ -116,7 +116,7 @@
 
               <div style="display: flex; gap: 10px; margin-top: 10px;">
                   <el-button type="primary" size="large" class="neon-btn" style="flex: 1" @click="generateImage" :loading="loading" :disabled="stopped">
-                    🚀 开始生成 ({{ form.num_images * unitPrice }} 积分)
+                    🚀 开始生成 ({{ costInfo.cost || form.num_images * unitPrice }} 积分)
                   </el-button>
                   <el-button type="danger" size="large" class="stop-btn" style="width: 100px" @click="stopTask" :disabled="!loading">
                     停止
@@ -125,11 +125,11 @@
             </el-form>
           </template>
 
-          <!-- ===== Tab 2: 图片再生成 ===== -->
+          <!-- ===== Tab 2: 图片再编辑 ===== -->
           <template v-else-if="activeTab === 'regenerate'">
             <el-form label-position="top">
               <!-- 参考图片上传 -->
-              <el-form-item label="原图 (支持多张批量)">
+              <el-form-item label="原图 (可上传多张融合生成)">
                 <el-upload action="#" list-type="picture-card" :auto-upload="false" :limit="5" :on-change="handleFileChange" :on-remove="handleRemove" multiple drag class="cyber-upload">
                   <el-icon><Plus /></el-icon>
                 </el-upload>
@@ -166,7 +166,7 @@
               </el-row>
 
               <el-button type="primary" size="large" class="neon-btn" style="width: 100%" @click="regenerateImage" :loading="regenLoading" :disabled="regenLoading || fileList.length === 0">
-                🚀 开始再生成 ({{ fileList.length * unitPrice }} 积分)
+                🚀 开始再编辑（{{ unitPrice }}积分）
               </el-button>
             </el-form>
           </template>
@@ -241,7 +241,7 @@ import { reactive, ref, onMounted, watch, computed } from 'vue'
 import request from '../../api/request'
 import { analyzeImages as analyzeImagesAPI, planImagePrompts as planImagePromptsAPI, generateImage as generateImageAPI } from '../../api/index'
 import { Plus, ZoomIn, Download, Close, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
 import HistoryPanel from '@/components/HistoryPanel.vue'
@@ -255,12 +255,17 @@ const activeTab = ref('generate')
 
 // ========== 模型配置 ==========
 const currentModel = ref(null)
+const costInfo = ref({ cost: 0 })  // 费用信息
+const currentDeductionId = ref(null)  // 预扣ID
+
 const unitPrice = computed(() => {
+  // 返回单价（用于备用计算）
   const pricingRules = currentModel.value?.config_schema?.pricing_rules
-  if (pricingRules?.mode === 'fixed') {
-    return pricingRules.fixed_cost || 0
+  if (pricingRules?.mode === 'dynamic') {
+    return pricingRules.base_price || 0
+  } else {
+    return pricingRules?.fixed_price || 0
   }
-  return pricingRules?.base_price || pricingRules?.unit_price || 2
 })
 
 // 加载模型配置
@@ -275,8 +280,34 @@ const loadModel = async () => {
     }
     currentModel.value = res
     console.log('模型配置加载成功:', res.config_schema?.pricing_rules)
+    // 计算默认费用
+    await calculateCost()
   } catch (e) {
     console.error('加载模型配置失败', e)
+  }
+}
+
+// 计算费用
+const calculateCost = async () => {
+  if (!currentModel.value) return
+
+  try {
+    const res = await request.post('/api/calculate-cost', {
+      model_id: 'nano-banana-2',
+      count: form.num_images
+    })
+    costInfo.value = res
+  } catch (e) {
+    console.error('计算费用失败', e)
+    // 备用：本地计算（简化版）
+    const pricingRules = currentModel.value?.config_schema?.pricing_rules
+    if (pricingRules?.mode === 'dynamic') {
+      const basePrice = pricingRules.base_price || 0
+      costInfo.value = { cost: basePrice * form.num_images }
+    } else {
+      const fixedPrice = pricingRules?.fixed_price || 0
+      costInfo.value = { cost: fixedPrice * form.num_images }
+    }
   }
 }
 
@@ -405,9 +436,48 @@ const analyzeImages = async () => {
 // === Tab 1: 商品图生成 - 生成图片 ===
 const generateImage = async () => {
   if (!form.product_type || !form.selling_points) return ElMessage.warning('请填写完整信息')
+
+  // 计算总费用
+  const totalCost = unitPrice.value * form.num_images
+
+  // 检查积分是否足够
+  const userStore = (await import('@/stores/user')).useUserStore()
+  if (userStore.points < totalCost) {
+    return ElMessage.warning('积分不足，请充值')
+  }
+
+  // 确认扣费
+  try {
+    await ElMessageBox.confirm(
+      `即将消耗 ${totalCost} 积分生成 ${form.num_images} 张图片，确认继续？`,
+      '费用确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
   loading.value = true
   stopped.value = false
+  currentDeductionId.value = null
   let successCount = 0
+
+  // 预扣积分
+  emit('log', '预扣积分...')
+  try {
+    const reserveRes = await request.post('/api/points/reserve', {
+      amount: totalCost,
+      model_id: 'nano-banana-2'
+    })
+    currentDeductionId.value = reserveRes.deduction_id
+    emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
+  } catch (e) {
+    emit('log', `预扣积分失败: ${e.message || e}`)
+    ElMessage.error('积分预扣失败')
+    loading.value = false
+    return
+  }
+
   emit('log', `正在规划 ${form.num_images} 张图片的拍摄方案...`)
   let promptList = []
 
@@ -468,6 +538,16 @@ const generateImage = async () => {
   } catch (e) {
     ElMessage.error('方案规划失败')
     emit('log', `规划失败: ${e.message || e}`)
+    // 退还预扣积分
+    if (currentDeductionId.value) {
+      try {
+        await request.post('/api/points/refund', {
+          deduction_id: currentDeductionId.value,
+          reason: '方案规划失败'
+        })
+        emit('log', '积分已退还')
+      } catch (err) {}
+    }
     loading.value = false
     return
   }
@@ -521,70 +601,151 @@ const generateImage = async () => {
 
   loading.value = false
   stopped.value = false
+
+  // 确认或退还积分
   if (successCount > 0) {
+    // 成功，确认扣费
+    if (currentDeductionId.value) {
+      try {
+        await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
+        emit('log', '积分扣费已确认')
+        emit('refresh-points')
+      } catch (e) {
+        console.error('确认扣费失败', e)
+      }
+    }
     ElMessage.success(`任务结束，成功 ${successCount} 张`)
     emit('log', `任务全部结束`)
+  } else {
+    // 全部失败，退还积分
+    if (currentDeductionId.value) {
+      try {
+        await request.post('/api/points/refund', {
+          deduction_id: currentDeductionId.value,
+          reason: '图片生成全部失败'
+        })
+        emit('log', '积分已退还')
+        emit('refresh-points')
+      } catch (e) {
+        console.error('退还积分失败', e)
+      }
+    }
+    emit('log', '任务失败，积分已退还')
   }
 }
 
-// === Tab 2: 图片再生成 - 直接生成（跳过规划）===
+// === Tab 2: 图片再编辑 - 生成1张图 ===
 const regenerateImage = async () => {
   if (imageBase64List.value.length === 0) return ElMessage.warning('请先上传原图')
   if (!regenForm.prompt.trim()) return ElMessage.warning('请输入修改指令')
 
+  // 固定费用：不管上传几张图，只生成1张，扣单价
+  const totalCost = unitPrice.value
+
+  // 检查积分是否足够
+  const userStore = (await import('@/stores/user')).useUserStore()
+  if (userStore.points < totalCost) {
+    return ElMessage.warning('积分不足，请充值')
+  }
+
+  // 确认扣费
+  try {
+    await ElMessageBox.confirm(
+      `即将消耗 ${totalCost} 积分进行图片再编辑，确认继续？`,
+      '费用确认',
+      { confirmButtonText: '确认', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+
   regenLoading.value = true
-  let successCount = 0
-  emit('log', `开始再生成 ${imageBase64List.value.length} 张图片...`)
+  currentDeductionId.value = null
 
-  for (let i = 0; i < imageBase64List.value.length; i++) {
-    const imgBase64 = imageBase64List.value[i]
-    emit('log', `[第 ${i+1}/${imageBase64List.value.length} 张] 正在处理...`)
+  // 预扣积分
+  emit('log', '预扣积分...')
+  try {
+    const reserveRes = await request.post('/api/points/reserve', {
+      amount: totalCost,
+      model_id: 'nano-banana-2'
+    })
+    currentDeductionId.value = reserveRes.deduction_id
+    emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
+  } catch (e) {
+    emit('log', `预扣积分失败: ${e.message || e}`)
+    ElMessage.error('积分预扣失败')
+    regenLoading.value = false
+    return
+  }
 
-    try {
-      // 直接调用生成 API，跳过规划步骤
-      const res = await generateImageAPI({
-        prompt: regenForm.prompt,
-        aspect_ratio: regenForm.aspect_ratio,
-        resolution: regenForm.resolution,
-        images: [imgBase64],  // 单张图片
-        seed: Date.now()
-      })
+  emit('log', `开始图片再编辑（${imageBase64List.value.length}张参考图）...`)
 
-      const url = res.data?.[0]?.url || res.data?.url
-      if (url) {
-        generatedImages.value.unshift(url)
-        emit('refresh-points')
-        emit('log', `第 ${i+1} 张再生成成功！`)
-        successCount++
+  try {
+    // 调用生成 API，传入所有图片作为参考，生成1张
+    const res = await generateImageAPI({
+      prompt: regenForm.prompt,
+      aspect_ratio: regenForm.aspect_ratio,
+      resolution: regenForm.resolution,
+      images: imageBase64List.value,  // 传入所有参考图
+      seed: Date.now()
+    })
 
-        try {
-          const response = await fetch(url)
-          if (response.ok) {
-            const blob = await response.blob()
-            await cacheMedia(url, blob, 'image')
-          }
-        } catch (e) {
-          console.warn('缓存图片失败', e)
+    const url = res.data?.[0]?.url || res.data?.url
+    if (url) {
+      generatedImages.value.unshift(url)
+      emit('log', `图片再编辑成功！`)
+
+      try {
+        const response = await fetch(url)
+        if (response.ok) {
+          const blob = await response.blob()
+          await cacheMedia(url, blob, 'image')
         }
-
-        saveImageHistory(url, regenForm.prompt)
-      } else {
-        ElMessage.error(`第 ${i+1} 张失败`)
-        emit('log', `第 ${i+1} 张服务端拒绝: ${JSON.stringify(res)}`)
+      } catch (e) {
+        console.warn('缓存图片失败', e)
       }
-    } catch (e) {
-      let errMsg = e.message || '未知错误'
-      if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'
-      ElMessage.error(`第 ${i+1} 张请求出错`)
-      emit('log', `第 ${i+1} 张异常: ${errMsg}`)
+
+      saveImageHistory(url, regenForm.prompt)
+
+      // 确认扣费
+      if (currentDeductionId.value) {
+        await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
+        emit('log', '积分扣费已确认')
+        emit('refresh-points')
+      }
+      ElMessage.success('图片再编辑完成')
+    } else {
+      ElMessage.error('生成失败')
+      emit('log', `服务端拒绝: ${JSON.stringify(res)}`)
+      // 退还积分
+      if (currentDeductionId.value) {
+        await request.post('/api/points/refund', {
+          deduction_id: currentDeductionId.value,
+          reason: '图片再编辑失败'
+        })
+        emit('log', '积分已退还')
+        emit('refresh-points')
+      }
+    }
+  } catch (e) {
+    let errMsg = e.message || '未知错误'
+    if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'
+    ElMessage.error('请求出错')
+    emit('log', `异常: ${errMsg}`)
+    // 退还积分
+    if (currentDeductionId.value) {
+      try {
+        await request.post('/api/points/refund', {
+          deduction_id: currentDeductionId.value,
+          reason: '图片再编辑异常'
+        })
+        emit('log', '积分已退还')
+        emit('refresh-points')
+      } catch (err) {}
     }
   }
 
   regenLoading.value = false
-  if (successCount > 0) {
-    ElMessage.success(`再生成完成，成功 ${successCount} 张`)
-    emit('log', `再生成任务全部结束`)
-  }
 }
 
 // ========== 保存历史记录 ==========
@@ -600,7 +761,7 @@ const saveImageHistory = async (resultUrl, prompt) => {
         resolution: activeTab.value === 'generate' ? form.resolution : regenForm.resolution
       },
       result_url: resultUrl,
-      cost_points: unitPrice.value
+      cost_points: costInfo.value.cost || unitPrice.value
     })
 
     if (historyPanelRef.value) {
@@ -615,7 +776,7 @@ const stopTask = () => { stopped.value = true; loading.value = false; emit('log'
 const downloadSingleImage = (url, suffix) => { const fileName = `Product_${Date.now()}_${suffix}.png`; saveAs(url, fileName) }
 const downloadAllImages = async () => { const zip = new JSZip(); const folder = zip.folder("images"); emit('log', '正在打包下载所有图片...')
   try { for (let i = 0; i < generatedImages.value.length; i++) { const url = generatedImages.value[i]; const fileName = `Product_${i + 1}.png`; const response = await fetch(url); const blob = await response.blob(); folder.file(fileName, blob) } zip.generateAsync({ type: "blob" }).then((content) => { saveAs(content, `Batch_Images_${Date.now()}.zip`); emit('log', '打包下载完成') }) } catch (e) { emit('log', `打包失败: ${e}`); ElMessage.error('打包下载失败') } }
-const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form, regenForm, images: generatedImages.value, activeTab: activeTab.value })) }; const restoreStateFromSession = () => { const data = sessionStorage.getItem(SESSION_KEY); if (data) { try { const parsed = JSON.parse(data); Object.assign(form, parsed.form); Object.assign(regenForm, parsed.regenForm || {}); generatedImages.value = parsed.images || []; if (parsed.activeTab) activeTab.value = parsed.activeTab } catch (e) {} } }; watch(form, saveStateToSession, { deep: true }); watch(regenForm, saveStateToSession, { deep: true }); watch(generatedImages, saveStateToSession, { deep: true }); watch(activeTab, saveStateToSession); onMounted(() => { loadModel(); restoreStateFromSession() })
+const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form, regenForm, images: generatedImages.value, activeTab: activeTab.value })) }; const restoreStateFromSession = () => { const data = sessionStorage.getItem(SESSION_KEY); if (data) { try { const parsed = JSON.parse(data); Object.assign(form, parsed.form); Object.assign(regenForm, parsed.regenForm || {}); generatedImages.value = parsed.images || []; if (parsed.activeTab) activeTab.value = parsed.activeTab } catch (e) {} } }; watch(form, saveStateToSession, { deep: true }); watch(regenForm, saveStateToSession, { deep: true }); watch(generatedImages, saveStateToSession, { deep: true }); watch(activeTab, saveStateToSession); watch(() => form.num_images, () => { calculateCost() }); onMounted(() => { loadModel(); restoreStateFromSession() })
 </script>
 
 <style scoped>

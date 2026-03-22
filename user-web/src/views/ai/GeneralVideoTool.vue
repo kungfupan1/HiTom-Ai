@@ -5,7 +5,7 @@
         <el-card class="cyber-glass" shadow="never">
           <template #header>
             <div class="card-header">
-              <span class="gradient-text">🎬 普通视频生成</span>
+              <span class="gradient-text">🎬 手动视频生成</span>
               <el-tag effect="dark" round color="#ff0055" style="border:none; box-shadow: 0 0 10px rgba(255,0,85,0.4)">{{ currentModel?.config_schema?.model_info?.display_name || currentModel?.display_name || 'AI视频' }}</el-tag>
             </div>
           </template>

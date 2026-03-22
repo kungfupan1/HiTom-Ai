@@ -48,7 +48,7 @@ const routes = [
         path: 'ai/video/general',
         name: 'GeneralVideoTool',
         component: () => import('@/views/ai/GeneralVideoTool.vue'),
-        meta: { title: '普通视频生成' }
+        meta: { title: '手动视频生成' }
       },
       {
         path: 'service/shop',
