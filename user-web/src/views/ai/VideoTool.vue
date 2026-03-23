@@ -128,14 +128,6 @@
             </el-button>
           </el-form>
         </el-card>
-
-        <!-- 费用说明卡片 -->
-        <el-card v-if="pricingDescription" class="cyber-glass pricing-card" shadow="never" style="margin-top: 16px;">
-          <template #header>
-            <span class="gradient-text">💰 费用说明</span>
-          </template>
-          <div class="pricing-desc" v-html="formatDescription(pricingDescription)"></div>
-        </el-card>
       </el-col>
 
       <el-col :xs="24" :sm="24" :md="13" :lg="13" class="right-panel-col">
@@ -266,12 +258,6 @@ const optionFieldGroups = computed(() => {
     groups.push(optionFields.value.slice(i, i + 2))
   }
   return groups
-})
-
-// 计算属性：费用说明
-const pricingDescription = computed(() => {
-  return currentModel.value?.config_schema?.pricing_rules?.description ||
-         currentModel.value?.pricing_description || ''
 })
 
 // ========== 费用计算 ==========
@@ -707,11 +693,6 @@ const stopStatusPolling = () => {
   }
 }
 
-// ========== 辅助函数 ==========
-const formatDescription = (text) => {
-  return text?.replace(/\n/g, '<br>') || ''
-}
-
 // ========== 视频预览弹窗 ==========
 const openVideoPreview = () => {
   videoPreviewVisible.value = true
@@ -851,16 +832,6 @@ onUnmounted(() => {
   font-weight: 600 !important;
 }
 .cyber-action-btn { background: rgba(0, 242, 96, 0.2) !important; border: 1px solid #00f260 !important; color: #00f260 !important; }
-
-/* 费用说明 */
-.pricing-card :deep(.el-card__header) {
-  padding: 12px 16px;
-}
-.pricing-desc {
-  font-size: 13px;
-  line-height: 1.8;
-  color: #a0aec0;
-}
 
 /* 5. 结果区 */
 .empty-state { padding: 50px 0; text-align: center; color: #718096; }

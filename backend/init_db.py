@@ -92,9 +92,7 @@ sora2 = AIModel(
             "duration_pricing": {"5": 2, "10": 2, "15": 5, "25": 25},
             "resolution_pricing": {"720P": 0, "1080P": 2}
         }
-    },
-    pricing_description="Sora-2 视频生成：\n5-10秒：2积分 | 15秒：5积分 | 25秒：25积分\n高清(1080P)：额外+2积分"
-)
+    })
 db.add(sora2)
 
 # Sora-2 Pro 模型
@@ -139,8 +137,6 @@ sora2pro = AIModel(
             "duration_pricing": {"5": 3, "10": 3, "15": 8, "25": 35},
             "resolution_pricing": {"720P": 0, "1080P": 3}
         }
-    },
-    pricing_description="Sora-2 Pro 视频生成：\n5-10秒：3积分 | 15秒：8积分 | 25秒：35积分\n高清(1080P)：额外+3积分"
 )
 db.add(sora2pro)
 
@@ -186,8 +182,6 @@ grok3 = AIModel(
             "duration_pricing": {"5": 3, "10": 3, "15": 8},
             "resolution_pricing": {"720P": 0, "1080P": 3}
         }
-    },
-    pricing_description="Grok Video 3 视频生成：\n5-10秒：3积分 | 15秒：8积分\n高清(1080P)：额外+3积分"
 )
 db.add(grok3)
 
@@ -223,8 +217,6 @@ nanobanana = AIModel(
             "unit_price": 2,
             "resolution_pricing": {"1K": 0, "2K": 1, "4K": 3}
         }
-    },
-    pricing_description="图片生成：2积分/张\n2K：+1积分 | 4K：+3积分"
 )
 db.add(nanobanana)
 

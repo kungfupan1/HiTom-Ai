@@ -292,7 +292,7 @@ def calculate_cost(db: Session, model_id: str, duration: int = None, resolution:
             "base_cost": total_cost,
             "total_cost": total_cost
         },
-        "description": model.pricing_description or "未配置计费规则，使用基础价格"
+        "description": "未配置计费规则，使用基础价格"
     }
 
 
