@@ -263,12 +263,16 @@ export const generateVideo = (data, modelConfig = null) => {
     }
   }
 
-  // 将超时时间延长到 3 分钟
+  // 从模型配置读取超时，兜底 3 分钟
+  const endpoint = modelConfig?.api_contract?.endpoint_url || AI_ENDPOINTS.GENERATE_VIDEO.url
+  const placeholder = modelConfig?.api_contract?.auth_placeholder || AI_ENDPOINTS.GENERATE_VIDEO.placeholder
+  const timeout = modelConfig?.api_contract?.timeout || 180000
+
   return callAI(
-    AI_ENDPOINTS.GENERATE_VIDEO.placeholder,
-    AI_ENDPOINTS.GENERATE_VIDEO.url,
+    placeholder,
+    endpoint,
     payload,
-    { timeout: 180000 }
+    { timeout }
   )
 }
 
@@ -292,9 +296,10 @@ export const getVideoStatus = (taskId, model) => {
 /**
  * 生成图片 (参考旧项目 MyWebTool 的 generate_image_workflow)
  * @param {object} data - { model, prompt, aspect_ratio, resolution, images, seed }
+ * @param {object} modelConfig - 可选的模型配置（包含 request_mapping）
  */
-export const generateImage = (data) => {
-  const { prompt, aspect_ratio, resolution, images, seed } = data
+export const generateImage = (data, modelConfig = null) => {
+  const { prompt, aspect_ratio, resolution, images, seed, model } = data
 
   // 计算尺寸 (复刻旧项目逻辑)
   const ratioMap = {
@@ -318,8 +323,8 @@ export const generateImage = (data) => {
   }
   const pixelSize = `${width}x${height}`
 
-  // 确定模型
-  const modelName = resolution === '4K' ? 'nano-banana-2-4k' : 'nano-banana-2'
+  // 确定模型名称：优先使用传入的 model，其次向后兼容
+  let modelName = model || (resolution === '4K' ? 'nano-banana-2-4k' : 'nano-banana-2')
 
   // 处理 seed
   const finalSeed = seed && seed !== -1 ? seed : Date.now()
@@ -338,19 +343,42 @@ export const generateImage = (data) => {
     })
   }
 
-  const payload = {
-    model: modelName,
-    prompt: finalPrompt,
-    size: pixelSize,
-    response_format: 'url',
-    image: imgList
+  // 构建 payload
+  let payload
+  if (modelConfig?.request_mapping) {
+    // 使用 request_mapping 动态构建
+    const mapping = modelConfig.request_mapping
+    payload = { ...(mapping.static_params || {}) }
+
+    for (const [targetField, sourceField] of Object.entries(mapping.dynamic_params || {})) {
+      if (sourceField === 'model') payload[targetField] = modelName
+      else if (sourceField === 'prompt') payload[targetField] = finalPrompt
+      else if (sourceField === 'size') payload[targetField] = pixelSize
+      else if (['images', 'image'].includes(sourceField) && imgList) payload[targetField] = imgList
+    }
+
+    if (!payload.response_format) payload.response_format = 'url'
+  } else {
+    // 默认 payload（向后兼容）
+    payload = {
+      model: modelName,
+      prompt: finalPrompt,
+      size: pixelSize,
+      response_format: 'url',
+      image: imgList
+    }
   }
 
+  // 确定端点
+  const endpoint = modelConfig?.api_contract?.endpoint_url || AI_ENDPOINTS.GENERATE_IMAGE.url
+  const placeholder = modelConfig?.api_contract?.auth_placeholder || AI_ENDPOINTS.GENERATE_IMAGE.placeholder
+  const timeout = modelConfig?.api_contract?.timeout || 120000
+
   return callAI(
-    AI_ENDPOINTS.GENERATE_IMAGE.placeholder,
-    AI_ENDPOINTS.GENERATE_IMAGE.url,
+    placeholder,
+    endpoint,
     payload,
-    { timeout: 120000 }
+    { timeout }
   )
 }
 
@@ -637,4 +665,62 @@ ${subtitleConfig.outputReq}`
     },
     { timeout: 120000 }
   )
+}
+
+
+// ==========================================
+// 任务提交相关（双轨制新增）
+// ==========================================
+
+/**
+ * 提交任务（统一入口）
+ * 根据 use_cloud_function 判断走云函数还是后端直接调用
+ *
+ * @param {object} data - { model_id, prompt, images, params }
+ * @returns {object} - { mode: 'cloud'|'direct', task_id?, deduction_id?, ... }
+ */
+export const submitTask = async (data) => {
+  const response = await request.post('/api/tasks/submit', data)
+
+  if (response.use_cloud_function) {
+    // 云函数模式：返回配置，让前端走原有逻辑
+    return {
+      mode: 'cloud',
+      tencent_function_url: response.tencent_function_url,
+      model_config: response.model_config
+    }
+  } else {
+    // 后端直接模式：返回 task_id，开始轮询
+    return {
+      mode: 'direct',
+      task_id: response.task_id,
+      deduction_id: response.deduction_id,
+      estimated_time: response.estimated_time,
+      cost_points: response.cost_points
+    }
+  }
+}
+
+/**
+ * 查询任务状态（后端直接模式）
+ * @param {string} taskId - 任务 ID
+ */
+export const getTaskStatus = (taskId) => {
+  return request.get(`/api/tasks/${taskId}/status`)
+}
+
+/**
+ * 确认扣费（任务成功后调用）
+ * @param {string} taskId - 任务 ID
+ */
+export const confirmTask = (taskId) => {
+  return request.post(`/api/tasks/${taskId}/confirm`)
+}
+
+/**
+ * 退还积分（任务失败/超时时调用）
+ * @param {string} taskId - 任务 ID
+ */
+export const refundTask = (taskId) => {
+  return request.post(`/api/tasks/${taskId}/refund`)
 }

@@ -106,6 +106,7 @@
                     <el-dropdown-item command="video">视频模型模板 (Grok)</el-dropdown-item>
                     <el-dropdown-item command="text">文案模型模板 (Qwen)</el-dropdown-item>
                     <el-dropdown-item command="image">商品图模型模板</el-dropdown-item>
+                    <el-dropdown-item command="shareyourai">ShareYourAi 视频模板 (后端直接)</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -114,7 +115,7 @@
           <el-input
             v-model="jsonContent"
             type="textarea"
-            :rows="25"
+            :rows="20"
             placeholder="请输入模型配置 JSON..."
             class="json-textarea"
             :class="{ 'has-error': jsonError }"
@@ -139,7 +140,18 @@
             <div class="preview-section">
               <h4>API 配置</h4>
               <p><strong>端点:</strong> {{ parsedConfig.api_contract?.endpoint_url }}</p>
-              <p><strong>占位符:</strong> {{ parsedConfig.api_contract?.placeholder }}</p>
+              <p>
+                <strong>认证方式:</strong>
+                <el-tag :type="getAuthTypeTag(parsedConfig.api_contract?.auth_type)" size="small">
+                  {{ getAuthTypeLabel(parsedConfig.api_contract?.auth_type) }}
+                </el-tag>
+              </p>
+              <p v-if="parsedConfig.api_contract?.auth_type === 'cloud_function'">
+                <strong>占位符:</strong> {{ parsedConfig.api_contract?.placeholder }}
+              </p>
+              <p v-if="parsedConfig.api_contract?.api_key">
+                <strong>API Key:</strong> {{ parsedConfig.api_contract?.api_key?.substring(0, 10) }}...
+              </p>
             </div>
             <div class="preview-section">
               <h4>计费规则</h4>
@@ -201,6 +213,7 @@ const JSON_TEMPLATES = {
     api_contract: {
       endpoint_url: "https://ai.t8star.cn/v2/videos/generations",
       status_url: "https://ai.t8star.cn/v2/videos/generations/{task_id}",
+      auth_type: "cloud_function",  // 云函数代理模式
       placeholder: "T8STAR_API_KEY",
       method: "POST",
       status_method: "GET",
@@ -239,6 +252,7 @@ const JSON_TEMPLATES = {
     },
     api_contract: {
       endpoint_url: "https://api-inference.modelscope.cn/v1/chat/completions",
+      auth_type: "cloud_function",
       placeholder: "MODELSCOPE_API_KEY",
       method: "POST",
       timeout: 120000
@@ -269,6 +283,7 @@ const JSON_TEMPLATES = {
     },
     api_contract: {
       endpoint_url: "https://ai.t8star.cn/v1/images/generations",
+      auth_type: "cloud_function",
       placeholder: "T8STAR_API_KEY",
       method: "POST",
       timeout: 120000
@@ -288,6 +303,52 @@ const JSON_TEMPLATES = {
     response_mapping: {
       result_url_path: "data[0].url"
     }
+  },
+  shareyourai: {
+    model_info: {
+      model_id: "grok-shareyourai",
+      display_name: "Grok-共享节点",
+      model_type: "video",
+      provider: "ShareYourAi",
+      description: "通过 ShareYourAi 后端直接调用"
+    },
+    api_contract: {
+      endpoint_url: "https://shareyouai.winepipeline.com/api/v1/tasks/submit",
+      status_url: "https://shareyouai.winepipeline.com/api/v1/tasks/{task_id}",
+      auth_type: "api_key_header",  // 后端直接调用模式
+      api_key: "sk-xxx",  // 替换为你的 API Key
+      api_key_header: "X-API-Key",
+      method: "POST",
+      status_method: "GET",
+      timeout: 180000
+    },
+    pricing_rules: {
+      mode: "fixed",
+      fixed_cost: 30
+    },
+    ui_schema: [
+      { field_name: "aspect_ratio", label: "画面比例", ui_type: "select", options: [{"label": "9:16", "value": "9:16"}, {"label": "16:9", "value": "16:9"}, {"label": "1:1", "value": "1:1"}], default_value: "9:16", required: true },
+      { field_name: "duration", label: "时长(秒)", ui_type: "select", options: [{"label": "5秒", "value": 5}, {"label": "6秒", "value": 6}, {"label": "10秒", "value": 10}], default_value: 6, required: true },
+      { field_name: "resolution", label: "分辨率", ui_type: "select", options: [{"label": "720P", "value": "720P"}, {"label": "1080P", "value": "1080P"}], default_value: "720P", required: true }
+    ],
+    request_mapping: {
+      dynamic_params: {
+        "model_id": "external_model_id",
+        "prompt": "prompt",
+        "duration": "params.duration",
+        "aspect_ratio": "params.aspect_ratio",
+        "resolution": "params.resolution"
+      },
+      static_params: {}
+    },
+    response_mapping: {
+      task_id_path: "task_id",
+      status_path: "task.status",
+      progress_path: "task.progress",
+      result_url_path: "task.result_url",
+      error_path: "error"
+    },
+    external_model_id: "grok_video"  // ShareYourAi 的模型ID
   }
 }
 
@@ -365,6 +426,7 @@ const handleEdit = (model) => {
       },
       api_contract: {
         endpoint_url: model.base_url + model.endpoint,
+        auth_type: "cloud_function",
         placeholder: model.api_provider === 't8star' ? 'T8STAR_API_KEY' : 'MODELSCOPE_API_KEY',
         method: 'POST'
       },
@@ -451,6 +513,13 @@ const handleSave = async () => {
     return
   }
 
+  // 后端直接调用模式必须配置 api_key
+  const authType = config.api_contract?.auth_type
+  if (authType !== 'cloud_function' && !config.api_contract?.api_key) {
+    ElMessage.error('后端直接调用模式必须配置 api_key')
+    return
+  }
+
   saving.value = true
   try {
     const payload = {
@@ -459,7 +528,7 @@ const handleSave = async () => {
       model_type: config.model_info.model_type,
       api_provider: config.model_info.provider,
       is_enabled: true,
-      config_schema: config,  // 发送解析后的对象，而不是字符串
+      config_schema: config,  // 发送解析后的对象
       // 兼容旧字段
       base_url: '',
       endpoint: '',
@@ -505,8 +574,26 @@ const getTypeLabel = (type) => {
 
 const getPricingMode = (pricing) => {
   if (!pricing) return '-'
-  if (pricing.mode === 'fixed') return `固定 ${pricing.fixed_cost || 0} 积分`
-  return `动态 (单价: ${pricing.unit_price || 0})`
+  if (pricing.mode === 'fixed') return `固定 ${pricing.fixed_price || pricing.fixed_cost || 0} 积分`
+  return `动态 (单价: ${pricing.base_price || pricing.unit_price || 0})`
+}
+
+const getAuthTypeTag = (authType) => {
+  const map = {
+    'cloud_function': 'success',
+    'api_key_header': 'warning',
+    'bearer_token': 'primary'
+  }
+  return map[authType] || 'info'
+}
+
+const getAuthTypeLabel = (authType) => {
+  const map = {
+    'cloud_function': '云函数代理',
+    'api_key_header': 'API Key (Header)',
+    'bearer_token': 'Bearer Token'
+  }
+  return map[authType] || authType || '未知'
 }
 
 onMounted(() => {

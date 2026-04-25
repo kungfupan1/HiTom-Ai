@@ -39,6 +39,12 @@ const routes = [
         meta: { title: '商品图生成' }
       },
       {
+        path: 'ai/image/manual',
+        name: 'ManualImageTool',
+        component: () => import('@/views/ai/ManualImageTool.vue'),
+        meta: { title: '手动图片生成' }
+      },
+      {
         path: 'ai/video',
         name: 'VideoTool',
         component: () => import('@/views/ai/VideoTool.vue'),

@@ -238,3 +238,48 @@ class ContentConfigResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============ 任务提交相关（双轨制新增）============
+class TaskSubmitRequest(BaseModel):
+    """任务提交请求"""
+    model_id: str
+    prompt: Optional[str] = None
+    images: Optional[List[str]] = None
+    params: Optional[Dict[str, Any]] = None
+
+
+class TaskSubmitResponse(BaseModel):
+    """任务提交响应"""
+    success: bool
+    use_cloud_function: bool = True  # True=走云函数，False=后端直接调用
+    task_id: Optional[str] = None
+    deduction_id: Optional[str] = None
+    estimated_time: Optional[int] = None
+    cost_points: Optional[int] = None
+    tencent_function_url: Optional[str] = None  # 云函数模式时返回
+    model_info: Optional[Dict[str, Any]] = None  # 云函数模式时返回模型配置
+    error: Optional[str] = None
+    error_code: Optional[str] = None
+
+
+class TaskStatusResponse(BaseModel):
+    """任务状态响应"""
+    success: bool
+    task: Optional[Dict[str, Any]] = None
+    refunded: Optional[bool] = None  # 是否已自动退款
+    message: Optional[str] = None
+    error: Optional[str] = None
+
+
+class TaskConfirmResponse(BaseModel):
+    """任务确认响应"""
+    success: bool
+    message: Optional[str] = None
+
+
+class TaskRefundResponse(BaseModel):
+    """任务退款响应"""
+    success: bool
+    refunded_amount: Optional[int] = None
+    message: Optional[str] = None

@@ -619,7 +619,7 @@ const saveHistory = async (resultUrl) => {
   try {
     // 从动态表单中获取 prompt 字段
     const promptField = filteredUiSchema.value.find(f => f.ui_type === 'textarea')
-    const promptSummary = promptField ? dynamicFormData[promptField.field_name]?.substring(0, 200) : ''
+    const promptSummary = promptField ? dynamicFormData[promptField.field_name] || '' : ''
 
     await request.post('/api/history', {
       task_type: 'video',

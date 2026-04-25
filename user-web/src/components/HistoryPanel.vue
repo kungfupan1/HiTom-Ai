@@ -110,6 +110,7 @@
                 <div v-if="item.prompt_summary" class="info-row">
                   <span class="label">提示词:</span>
                   <span class="value prompt-text">{{ item.prompt_summary }}</span>
+                  <el-button link size="small" class="copy-btn" @click="copyPrompt(item.prompt_summary)">复制</el-button>
                 </div>
                 <div v-if="item.params_json" class="info-row">
                   <span class="label">参数:</span>
@@ -289,6 +290,16 @@ const formatParams = (params) => {
   if (params.resolution) parts.push(params.resolution)
   if (params.aspect_ratio || params.ratio) parts.push(params.aspect_ratio || params.ratio)
   return parts.join(' | ') || JSON.stringify(params)
+}
+
+// 复制提示词
+const copyPrompt = async (text) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success('提示词已复制')
+  } catch {
+    ElMessage.error('复制失败')
+  }
 }
 
 // 处理预览点击
@@ -648,11 +659,21 @@ onMounted(() => {
 }
 
 .prompt-text {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 80px;
+  overflow-y: auto;
+  line-height: 1.5;
+}
+
+.copy-btn {
+  flex-shrink: 0;
+  margin-left: 8px;
+  color: #a0aec0 !important;
+}
+
+.copy-btn:hover {
+  color: #00f260 !important;
 }
 
 .params-text {

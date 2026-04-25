@@ -25,6 +25,15 @@
             </div>
           </template>
 
+          <!-- 模型选择器 (两个 Tab 共享) -->
+          <el-form label-position="top">
+            <el-form-item label="生成模型">
+              <el-select v-model="selectedModelId" style="width: 100%" class="cyber-select" popper-class="cyber-popper" @change="onModelChange">
+                <el-option v-for="m in models" :key="m.model_id" :value="m.model_id" :label="m.config_schema?.model_info?.display_name || m.display_name" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+
           <!-- ===== Tab 1: 商品图生成 ===== -->
           <template v-if="activeTab === 'generate'">
             <el-form label-position="top">
@@ -97,18 +106,14 @@
                 <el-col :span="12">
                   <el-form-item label="画面比例">
                     <el-select v-model="form.aspect_ratio" style="width: 100%" class="cyber-select" popper-class="cyber-popper">
-                      <el-option value="3:4" label="3:4" />
-                      <el-option value="1:1" label="1:1" />
-                      <el-option value="16:9" label="16:9" />
-                      <el-option value="9:16" label="9:16" />
+                      <el-option v-for="opt in aspectRatioOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                     </el-select>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
                    <el-form-item label="分辨率">
                     <el-select v-model="form.resolution" style="width: 100%" class="cyber-select" popper-class="cyber-popper">
-                      <el-option value="1K" label="1K" />
-                      <el-option value="2K" label="2K" />
+                      <el-option v-for="opt in resolutionOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -148,18 +153,14 @@
                 <el-col :span="12">
                   <el-form-item label="画面比例">
                     <el-select v-model="regenForm.aspect_ratio" style="width: 100%" class="cyber-select" popper-class="cyber-popper">
-                      <el-option value="3:4" label="3:4" />
-                      <el-option value="1:1" label="1:1" />
-                      <el-option value="16:9" label="16:9" />
-                      <el-option value="9:16" label="9:16" />
+                      <el-option v-for="opt in aspectRatioOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                     </el-select>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
                    <el-form-item label="分辨率">
                     <el-select v-model="regenForm.resolution" style="width: 100%" class="cyber-select" popper-class="cyber-popper">
-                      <el-option value="1K" label="1K" />
-                      <el-option value="2K" label="2K" />
+                      <el-option v-for="opt in resolutionOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -254,12 +255,13 @@ const emit = defineEmits(['refresh-points', 'log'])
 const activeTab = ref('generate')
 
 // ========== 模型配置 ==========
+const models = ref([])
+const selectedModelId = ref('')
 const currentModel = ref(null)
 const costInfo = ref({ cost: 0 })  // 费用信息
 const currentDeductionId = ref(null)  // 预扣ID
 
 const unitPrice = computed(() => {
-  // 返回单价（用于备用计算）
   const pricingRules = currentModel.value?.config_schema?.pricing_rules
   if (pricingRules?.mode === 'dynamic') {
     return pricingRules.base_price || 0
@@ -268,22 +270,53 @@ const unitPrice = computed(() => {
   }
 })
 
-// 加载模型配置
-const loadModel = async () => {
+// 从模型 ui_schema 动态读取下拉选项
+const getUiOptions = (fieldName) => {
+  const schema = currentModel.value?.config_schema?.ui_schema
+  if (!schema) return null
+  const field = schema.find(f => f.field_name === fieldName)
+  return field?.options || null
+}
+
+const aspectRatioOptions = computed(() => {
+  return getUiOptions('aspect_ratio') || [
+    { label: '3:4', value: '3:4' }, { label: '1:1', value: '1:1' },
+    { label: '16:9', value: '16:9' }, { label: '9:16', value: '9:16' }
+  ]
+})
+
+const resolutionOptions = computed(() => {
+  return getUiOptions('resolution') || [
+    { label: '1K', value: '1K' }, { label: '2K', value: '2K' }
+  ]
+})
+
+// 加载图片模型列表
+const loadModels = async () => {
   try {
-    const res = await request.get('/api/models/nano-banana-2')
-    // 确保 config_schema 是对象
+    const res = await request.get('/api/models?model_type=image')
+    models.value = res
+    if (res.length > 0) {
+      selectedModelId.value = res[0].model_id
+      await onModelChange()
+    }
+  } catch (e) {
+    console.error('加载模型列表失败', e)
+  }
+}
+
+// 切换模型
+const onModelChange = async () => {
+  if (!selectedModelId.value) return
+  try {
+    const res = await request.get(`/api/models/${selectedModelId.value}`)
     if (typeof res.config_schema === 'string') {
-      try {
-        res.config_schema = JSON.parse(res.config_schema)
-      } catch {}
+      try { res.config_schema = JSON.parse(res.config_schema) } catch {}
     }
     currentModel.value = res
-    console.log('模型配置加载成功:', res.config_schema?.pricing_rules)
-    // 计算默认费用
     await calculateCost()
   } catch (e) {
-    console.error('加载模型配置失败', e)
+    console.error('加载模型详情失败', e)
   }
 }
 
@@ -293,13 +326,12 @@ const calculateCost = async () => {
 
   try {
     const res = await request.post('/api/calculate-cost', {
-      model_id: 'nano-banana-2',
+      model_id: selectedModelId.value,
       count: form.num_images
     })
     costInfo.value = res
   } catch (e) {
     console.error('计算费用失败', e)
-    // 备用：本地计算（简化版）
     const pricingRules = currentModel.value?.config_schema?.pricing_rules
     if (pricingRules?.mode === 'dynamic') {
       const basePrice = pricingRules.base_price || 0
@@ -467,7 +499,7 @@ const generateImage = async () => {
   try {
     const reserveRes = await request.post('/api/points/reserve', {
       amount: totalCost,
-      model_id: 'nano-banana-2'
+      model_id: selectedModelId.value
     })
     currentDeductionId.value = reserveRes.deduction_id
     emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
@@ -562,12 +594,13 @@ const generateImage = async () => {
     emit('log', `[第 ${i+1}/${promptList.length} 张] 正在请求云端绘图...`)
     try {
       const res = await generateImageAPI({
+        model: selectedModelId.value,
         prompt: currentPrompt,
         aspect_ratio: form.aspect_ratio,
         resolution: form.resolution,
         images: imageBase64List.value,
         seed: form.seed
-      })
+      }, currentModel.value?.config_schema)
 
       const url = res.data?.[0]?.url || res.data?.url
       if (url) {
@@ -667,7 +700,7 @@ const regenerateImage = async () => {
   try {
     const reserveRes = await request.post('/api/points/reserve', {
       amount: totalCost,
-      model_id: 'nano-banana-2'
+      model_id: selectedModelId.value
     })
     currentDeductionId.value = reserveRes.deduction_id
     emit('log', `预扣成功，deduction_id: ${currentDeductionId.value}`)
@@ -683,12 +716,13 @@ const regenerateImage = async () => {
   try {
     // 调用生成 API，传入所有图片作为参考，生成1张
     const res = await generateImageAPI({
+      model: selectedModelId.value,
       prompt: regenForm.prompt,
       aspect_ratio: regenForm.aspect_ratio,
       resolution: regenForm.resolution,
       images: imageBase64List.value,  // 传入所有参考图
       seed: Date.now()
-    })
+    }, currentModel.value?.config_schema)
 
     const url = res.data?.[0]?.url || res.data?.url
     if (url) {
@@ -753,9 +787,9 @@ const saveImageHistory = async (resultUrl, prompt) => {
   try {
     await request.post('/api/history', {
       task_type: 'image',
-      model_id: 'nano-banana-2',
+      model_id: selectedModelId.value,
       status: 'success',
-      prompt_summary: prompt?.substring(0, 200) || '',
+      prompt_summary: prompt || '',
       params_json: {
         aspect_ratio: activeTab.value === 'generate' ? form.aspect_ratio : regenForm.aspect_ratio,
         resolution: activeTab.value === 'generate' ? form.resolution : regenForm.resolution
@@ -776,7 +810,7 @@ const stopTask = () => { stopped.value = true; loading.value = false; emit('log'
 const downloadSingleImage = (url, suffix) => { const fileName = `Product_${Date.now()}_${suffix}.png`; saveAs(url, fileName) }
 const downloadAllImages = async () => { const zip = new JSZip(); const folder = zip.folder("images"); emit('log', '正在打包下载所有图片...')
   try { for (let i = 0; i < generatedImages.value.length; i++) { const url = generatedImages.value[i]; const fileName = `Product_${i + 1}.png`; const response = await fetch(url); const blob = await response.blob(); folder.file(fileName, blob) } zip.generateAsync({ type: "blob" }).then((content) => { saveAs(content, `Batch_Images_${Date.now()}.zip`); emit('log', '打包下载完成') }) } catch (e) { emit('log', `打包失败: ${e}`); ElMessage.error('打包下载失败') } }
-const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form, regenForm, images: generatedImages.value, activeTab: activeTab.value })) }; const restoreStateFromSession = () => { const data = sessionStorage.getItem(SESSION_KEY); if (data) { try { const parsed = JSON.parse(data); Object.assign(form, parsed.form); Object.assign(regenForm, parsed.regenForm || {}); generatedImages.value = parsed.images || []; if (parsed.activeTab) activeTab.value = parsed.activeTab } catch (e) {} } }; watch(form, saveStateToSession, { deep: true }); watch(regenForm, saveStateToSession, { deep: true }); watch(generatedImages, saveStateToSession, { deep: true }); watch(activeTab, saveStateToSession); watch(() => form.num_images, () => { calculateCost() }); onMounted(() => { loadModel(); restoreStateFromSession() })
+const SESSION_KEY = 'image_tool_data'; const saveStateToSession = () => { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ form, regenForm, images: generatedImages.value, activeTab: activeTab.value })) }; const restoreStateFromSession = () => { const data = sessionStorage.getItem(SESSION_KEY); if (data) { try { const parsed = JSON.parse(data); Object.assign(form, parsed.form); Object.assign(regenForm, parsed.regenForm || {}); generatedImages.value = parsed.images || []; if (parsed.activeTab) activeTab.value = parsed.activeTab } catch (e) {} } }; watch(form, saveStateToSession, { deep: true }); watch(regenForm, saveStateToSession, { deep: true }); watch(generatedImages, saveStateToSession, { deep: true }); watch(activeTab, saveStateToSession); watch(() => form.num_images, () => { calculateCost() }); onMounted(() => { loadModels(); restoreStateFromSession() })
 </script>
 
 <style scoped>

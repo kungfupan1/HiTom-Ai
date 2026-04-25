@@ -23,6 +23,7 @@
               <span v-show="!isCollapse">商品图/视频</span>
             </template>
             <el-menu-item index="/ai/image">🎨 商品图生成</el-menu-item>
+            <el-menu-item index="/ai/image/manual">✏️ 手动图片生成</el-menu-item>
             <el-menu-item index="/ai/video">🎬 带货视频生成</el-menu-item>
             <el-menu-item index="/ai/video/general">✨ 手动视频生成</el-menu-item>
           </el-sub-menu>

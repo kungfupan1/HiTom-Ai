@@ -171,10 +171,13 @@ class GenerationHistory(Base):
 
     # 任务信息
     task_id = Column(String(100))  # AI 服务商返回的 task_id
-    status = Column(String(20), default="success")  # success, failed
+    status = Column(String(20), default="pending")  # pending, processing, success, failed, timeout
+
+    # 关联预扣积分
+    deduction_id = Column(String(50), index=True)  # 关联的积分预扣 ID
 
     # 生成参数摘要
-    prompt_summary = Column(String(500))  # 提示词摘要（截断）
+    prompt_summary = Column(Text)  # 提示词完整内容
     params_json = Column(JSON)  # 完整参数（duration, resolution, ratio 等）
 
     # 结果
@@ -183,3 +186,4 @@ class GenerationHistory(Base):
 
     # 时间
     create_time = Column(DateTime, default=datetime.now)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)

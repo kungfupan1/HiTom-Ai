@@ -198,7 +198,7 @@
 import { Plus, Close } from '@element-plus/icons-vue'
 import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import request from '@/api/request'
-import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI, generateVideoScript, getPricingInfo } from '@/api/index'
+import { generateVideo, getVideoStatus, analyzeImages as analyzeImagesAPI, generateVideoScript, getPricingInfo, submitTask as submitTaskAPI, getTaskStatus as getDirectTaskStatus, confirmTask, refundTask } from '@/api/index'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import HistoryPanel from '@/components/HistoryPanel.vue'
@@ -479,6 +479,22 @@ const submitTask = async () => {
 
   emit('log', '开始视频生成任务...')
 
+  // 判断是否使用后端直接调用模式
+  const useCloudFunction = currentModel.value?.use_cloud_function !== false
+
+  if (!useCloudFunction) {
+    // ========== 后端直接调用模式 ==========
+    emit('log', '使用后端直接调用模式...')
+    await submitDirectMode()
+  } else {
+    // ========== 云函数代理模式（原有逻辑）==========
+    emit('log', '使用云函数代理模式...')
+    await submitCloudFunctionMode()
+  }
+}
+
+// ========== 云函数代理模式（原有逻辑）==========
+const submitCloudFunctionMode = async () => {
   try {
     // 步骤1: 预扣积分
     emit('log', '步骤1: 预扣积分...')
@@ -559,6 +575,200 @@ const submitTask = async () => {
     ElMessage.error(e.message || '提交失败')
     loading.value = false
     taskStatus.value = ''
+  }
+}
+
+// ========== 后端直接调用模式（新增）==========
+const submitDirectMode = async () => {
+  try {
+    // 步骤1: 调用 AI 生成视频脚本（仍然使用云函数代理）
+    emit('log', '步骤1: 调用 AI 生成视频脚本...')
+
+    const scriptData = {
+      images: imageBase64List.value,
+      product_type: dynamicFormData.product_type,
+      selling_points: dynamicFormData.selling_points,
+      style: dynamicFormData.style,
+      language: dynamicFormData.language,
+      region: dynamicFormData.region,
+      category: dynamicFormData.category,
+      subtitle: dynamicFormData.subtitle !== false
+    }
+
+    const scriptRes = await generateVideoScript(scriptData, videoScriptPrompt.value)
+    const videoScript = scriptRes?.choices?.[0]?.message?.content || ''
+
+    if (!videoScript) {
+      throw new Error('视频脚本生成失败，请重试')
+    }
+
+    // 打印生成的脚本到日志窗口
+    emit('log', '===== AI 生成的视频脚本 =====')
+    emit('log', videoScript)
+    emit('log', '=============================')
+
+    // 步骤2: 提交任务到后端（后端会自动预扣积分）
+    emit('log', '步骤2: 提交任务到后端...')
+    const submitResult = await submitTaskAPI({
+      model_id: selectedModelId.value,
+      prompt: videoScript,
+      images: imageBase64List.value,
+      params: {
+        duration: dynamicFormData.duration,
+        aspect_ratio: dynamicFormData.aspect_ratio,
+        resolution: dynamicFormData.resolution
+      }
+    })
+
+    if (submitResult.mode !== 'direct') {
+      // 如果后端返回的是云函数模式，回退到云函数逻辑
+      emit('log', '后端返回云函数模式，切换...')
+      loading.value = false
+      taskStatus.value = ''
+      return await submitCloudFunctionMode()
+    }
+
+    taskId.value = submitResult.task_id
+    currentDeductionId.value = submitResult.deduction_id
+    emit('log', `任务已提交，task_id: ${taskId.value}`)
+    emit('log', `预计等待时间: ${submitResult.estimated_time || 300}秒`)
+
+    userStore.refreshPoints()
+    emit('refresh-points')
+
+    // 步骤3: 开始轮询（后端直接模式）
+    emit('log', '开始轮询生成状态...')
+    startDirectModePolling()
+
+    ElMessage.success('视频生成任务已提交')
+  } catch (e) {
+    emit('log', `错误: ${e.message || '提交失败'}`)
+    ElMessage.error(e.message || '提交失败')
+    loading.value = false
+    taskStatus.value = ''
+  }
+}
+
+// ========== 后端直接模式轮询 ==========
+let directModeTimer = null
+let directModeAttempts = 0
+const DIRECT_MODE_CONFIG = {
+  interval: 30000,      // 30秒轮询间隔
+  maxAttempts: 20       // 最大20次 = 10分钟
+}
+
+const startDirectModePolling = () => {
+  stopDirectModePolling()
+  directModeAttempts = 0
+
+  directModeTimer = setInterval(async () => {
+    directModeAttempts++
+
+    if (directModeAttempts > DIRECT_MODE_CONFIG.maxAttempts) {
+      // 超时
+      clearInterval(directModeTimer)
+      taskStatus.value = 'timeout'
+      loading.value = false
+      emit('log', '任务超时，正在退还积分...')
+
+      try {
+        await refundTask(taskId.value)
+        userStore.refreshPoints()
+        emit('refresh-points')
+        emit('log', '积分已退还')
+        ElMessage.warning('生成超时，积分已退还')
+      } catch (e) {
+        emit('log', '退还积分失败: ' + (e.message || '未知错误'))
+      }
+      return
+    }
+
+    try {
+      const result = await getDirectTaskStatus(taskId.value)
+
+      if (!result.success) {
+        emit('log', `状态查询失败: ${result.error || '未知错误'}`)
+        return
+      }
+
+      const task = result.task
+      const status = task?.status
+
+      emit('log', `轮询 #${directModeAttempts}: 状态=${status}`)
+
+      // 更新进度
+      if (task?.progress) {
+        progress.value = Math.min(99, parseInt(task.progress))
+      }
+
+      if (status === 'success') {
+        // 成功
+        clearInterval(directModeTimer)
+        progress.value = 100
+        videoUrl.value = task.result_url
+        taskStatus.value = 'success'
+        loading.value = false
+
+        // 确认扣费
+        try {
+          await confirmTask(taskId.value)
+          emit('log', '扣费已确认')
+        } catch (e) {
+          emit('log', '确认扣费失败（可能已确认）')
+        }
+
+        userStore.refreshPoints()
+        emit('refresh-points')
+        ElMessage.success('视频生成完成！')
+
+        // 缓存视频
+        try {
+          const response = await fetch(task.result_url)
+          if (response.ok) {
+            const blob = await response.blob()
+            await cacheMedia(task.result_url, blob, 'video')
+          }
+        } catch (e) {
+          console.warn('缓存视频失败', e)
+        }
+
+        // 保存历史记录
+        saveHistory(task.result_url)
+      }
+      else if (status === 'failed' || status === 'timeout') {
+        // 失败/超时
+        clearInterval(directModeTimer)
+        taskStatus.value = 'fail'
+        loading.value = false
+
+        if (result.refunded) {
+          emit('log', '任务失败，积分已自动退还')
+          ElMessage.error('生成失败，积分已退还')
+        } else {
+          emit('log', '任务失败，正在退还积分...')
+          try {
+            await refundTask(taskId.value)
+            emit('log', '积分已退还')
+            ElMessage.error('生成失败，积分已退还')
+          } catch (e) {
+            emit('log', '退还积分失败: ' + (e.message || '未知错误'))
+          }
+        }
+
+        userStore.refreshPoints()
+        emit('refresh-points')
+      }
+      // 其他状态继续轮询
+    } catch (e) {
+      emit('log', `轮询异常: ${e.message || '未知错误'}`)
+    }
+  }, DIRECT_MODE_CONFIG.interval)
+}
+
+const stopDirectModePolling = () => {
+  if (directModeTimer) {
+    clearInterval(directModeTimer)
+    directModeTimer = null
   }
 }
 
@@ -708,7 +918,7 @@ const closeVideoPreview = () => {
 const saveHistory = async (resultUrl) => {
   try {
     // 构建 prompt 摘要
-    const promptSummary = `产品: ${dynamicFormData.product_type || ''}\n卖点: ${dynamicFormData.selling_points?.substring(0, 100) || ''}`
+    const promptSummary = `产品: ${dynamicFormData.product_type || ''}\n卖点: ${dynamicFormData.selling_points || ''}`
 
     await request.post('/api/history', {
       task_type: 'video',
@@ -744,6 +954,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopStatusPolling()
+  stopDirectModePolling()
 })
 </script>
 

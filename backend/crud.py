@@ -589,3 +589,116 @@ def delete_generation_history(db: Session, history_id: int, user_id: int) -> boo
     db.delete(history)
     db.commit()
     return True
+
+
+# ============ 任务记录相关（双轨制新增）============
+def create_task_record(
+    db: Session,
+    task_id: str,
+    user_id: int,
+    model_id: str,
+    deduction_id: str,
+    task_type: str = "video",
+    cost_points: int = 0,
+    prompt_summary: str = None,
+    params_json: Dict[str, Any] = None,
+    status: str = "pending"
+) -> GenerationHistory:
+    """
+    创建任务记录
+
+    Args:
+        task_id: AI 服务商返回的任务 ID
+        user_id: 用户 ID
+        model_id: 模型 ID
+        deduction_id: 积分预扣 ID
+        task_type: 任务类型
+        cost_points: 消耗积分
+        prompt_summary: 提示词摘要
+        params_json: 完整参数
+        status: 任务状态
+
+    Returns:
+        GenerationHistory 记录
+    """
+    # 截断 prompt_summary
+    if prompt_summary and len(prompt_summary) > 500:
+        prompt_summary = prompt_summary[:500]
+
+    history = GenerationHistory(
+        task_id=task_id,
+        user_id=user_id,
+        model_id=model_id,
+        deduction_id=deduction_id,
+        task_type=task_type,
+        status=status,
+        cost_points=cost_points,
+        prompt_summary=prompt_summary,
+        params_json=params_json
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    return history
+
+
+def get_task_record(db: Session, task_id: str) -> Optional[GenerationHistory]:
+    """
+    根据 task_id 获取任务记录
+
+    Args:
+        task_id: 任务 ID
+
+    Returns:
+        GenerationHistory 或 None
+    """
+    return db.query(GenerationHistory).filter(
+        GenerationHistory.task_id == task_id
+    ).first()
+
+
+def get_task_record_by_user(db: Session, task_id: str, user_id: int) -> Optional[GenerationHistory]:
+    """
+    根据 task_id 和 user_id 获取任务记录（带用户校验）
+
+    Args:
+        task_id: 任务 ID
+        user_id: 用户 ID
+
+    Returns:
+        GenerationHistory 或 None
+    """
+    return db.query(GenerationHistory).filter(
+        GenerationHistory.task_id == task_id,
+        GenerationHistory.user_id == user_id
+    ).first()
+
+
+def update_task_status(
+    db: Session,
+    task_id: str,
+    status: str,
+    result_url: str = None
+) -> Optional[GenerationHistory]:
+    """
+    更新任务状态
+
+    Args:
+        task_id: 任务 ID
+        status: 新状态
+        result_url: 结果 URL（可选）
+
+    Returns:
+        更新后的记录或 None
+    """
+    task = get_task_record(db, task_id)
+    if not task:
+        return None
+
+    task.status = status
+    if result_url:
+        task.result_url = result_url
+
+    db.commit()
+    db.refresh(task)
+    return task

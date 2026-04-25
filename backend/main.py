@@ -12,11 +12,12 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
 from database import get_db, init_db, SessionLocal
-from models import Base
+from models import Base, PointReserve
 import crud
 import schemas
 from utils import hash_password, verify_password, create_access_token, decode_token, create_token_pair, verify_refresh_token
 from engines.payload_builder import payload_builder
+import httpx
 
 # 创建应用
 app = FastAPI(
@@ -926,6 +927,446 @@ async def get_content_configs_enabled(db: Session = Depends(get_db)):
         if c.key in default_enabled and c.config:
             default_enabled[c.key] = c.config.get('enabled', True)
     return {"configs": default_enabled}
+
+
+# ============ 任务提交接口（配置驱动）============
+
+# HTTP 客户端（复用）
+_http_client = None
+
+def get_http_client():
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(timeout=120.0)
+    return _http_client
+
+
+async def call_external_api(
+    api_contract: Dict[str, Any],
+    payload: Dict[str, Any],
+    method: str = "POST"
+) -> Dict[str, Any]:
+    """
+    根据 api_contract 配置调用外部 API
+
+    api_contract 结构:
+    {
+        "endpoint_url": "https://...",
+        "status_url": "https://...",
+        "method": "POST",
+        "auth_type": "cloud_function" | "api_key_header" | "bearer_token",
+        "placeholder": "T8STAR_API_KEY",  // cloud_function 时用
+        "api_key": "sk-xxx",              // 直接调用时用
+        "api_key_header": "X-API-Key"     // 默认 X-API-Key
+    }
+    """
+    client = get_http_client()
+    endpoint_url = api_contract.get("endpoint_url", "")
+    auth_type = api_contract.get("auth_type", "cloud_function")
+
+    # 构建请求头
+    headers = {"Content-Type": "application/json"}
+
+    if auth_type == "api_key_header":
+        # 后端直接调用：使用 Header 认证
+        header_name = api_contract.get("api_key_header", "X-API-Key")
+        api_key = api_contract.get("api_key", "")
+        if api_key:
+            headers[header_name] = api_key
+    elif auth_type == "bearer_token":
+        # 后端直接调用：使用 Bearer Token 认证
+        api_key = api_contract.get("api_key", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+    # cloud_function 模式：后端不处理，前端自己走云函数
+
+    try:
+        if method.upper() == "GET":
+            response = await client.get(endpoint_url, headers=headers)
+        else:
+            response = await client.post(endpoint_url, headers=headers, json=payload)
+
+        return response.json()
+    except httpx.HTTPError as e:
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+async def query_task_status(
+    api_contract: Dict[str, Any],
+    task_id: str
+) -> Dict[str, Any]:
+    """查询任务状态"""
+    client = get_http_client()
+    status_url = api_contract.get("status_url", "")
+    auth_type = api_contract.get("auth_type", "cloud_function")
+
+    # 替换 {task_id} 占位符
+    status_url = status_url.replace("{task_id}", task_id)
+
+    # 构建请求头
+    headers = {"Content-Type": "application/json"}
+
+    if auth_type == "api_key_header":
+        header_name = api_contract.get("api_key_header", "X-API-Key")
+        api_key = api_contract.get("api_key", "")
+        if api_key:
+            headers[header_name] = api_key
+    elif auth_type == "bearer_token":
+        api_key = api_contract.get("api_key", "")
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        response = await client.get(status_url, headers=headers)
+        return response.json()
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/tasks/submit", response_model=schemas.TaskSubmitResponse)
+async def submit_task(
+    request: schemas.TaskSubmitRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    提交任务 - 配置驱动模式
+
+    根据 config_schema.api_contract.auth_type 判断调用方式：
+    - "cloud_function": 返回云函数配置，让前端走原有路径
+    - "api_key_header" / "bearer_token": 后端直接调用外部 API
+    """
+    # 1. 查询模型配置
+    model = crud.get_model_by_id(db, request.model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    # 2. 获取 api_contract 配置
+    config_schema = model.config_schema or {}
+    api_contract = config_schema.get("api_contract", {})
+    auth_type = api_contract.get("auth_type", "cloud_function")
+
+    # 3. 判断调用方式
+    if auth_type == "cloud_function":
+        # 云函数模式，返回配置让前端走原有路径
+        tencent_function_url = crud.get_config(db, "tencent_function_url", "")
+        return schemas.TaskSubmitResponse(
+            success=True,
+            use_cloud_function=True,
+            tencent_function_url=tencent_function_url,
+            model_info={
+                "model_id": model.model_id,
+                "display_name": model.display_name,
+                "config_schema": model.config_schema
+            }
+        )
+
+    # 4. 后端直接调用模式
+    pricing_rules = config_schema.get("pricing_rules", {})
+
+    # 计算积分
+    form_data = request.params or {}
+    if request.prompt:
+        form_data["prompt"] = request.prompt
+
+    cost_result = crud.calculate_cost_dynamic(db, request.model_id, form_data)
+    cost_points = cost_result.get("cost", 0)
+
+    if cost_points <= 0:
+        cost_points = pricing_rules.get("fixed_cost", model.base_price)
+
+    # 验证积分
+    if current_user.points < cost_points:
+        raise HTTPException(
+            status_code=402,
+            detail="积分不足",
+            headers={"X-Error-Code": "INSUFFICIENT_POINTS"}
+        )
+
+    # 预扣积分
+    reserve = crud.reserve_points(
+        db,
+        user_id=current_user.id,
+        amount=cost_points,
+        model_id=request.model_id
+    )
+
+    if not reserve:
+        raise HTTPException(status_code=400, detail="预扣积分失败")
+
+    deduction_id = reserve.deduction_id
+
+    # 5. 构建请求 payload（使用 request_mapping）
+    request_mapping = config_schema.get("request_mapping", {})
+    external_model_id = config_schema.get("external_model_id", request.model_id)
+
+    if request_mapping:
+        # 使用 request_mapping 构建 payload
+        payload = {}
+        dynamic_params = request_mapping.get("dynamic_params", {})
+        static_params = request_mapping.get("static_params", {})
+
+        payload.update(static_params)
+
+        for target_field, source_field in dynamic_params.items():
+            if source_field == "model_id":
+                payload[target_field] = external_model_id
+            elif source_field == "prompt":
+                payload[target_field] = request.prompt
+            elif source_field == "params.duration":
+                if "params" not in payload:
+                    payload["params"] = {}
+                payload["params"]["duration"] = request.params.get("duration") if request.params else None
+            elif source_field == "params.aspect_ratio":
+                if "params" not in payload:
+                    payload["params"] = {}
+                payload["params"]["aspect_ratio"] = request.params.get("aspect_ratio") if request.params else None
+            elif source_field == "params.resolution":
+                if "params" not in payload:
+                    payload["params"] = {}
+                payload["params"]["resolution"] = request.params.get("resolution") if request.params else None
+            elif source_field == "external_id":
+                payload[target_field] = deduction_id
+            elif source_field and request.params:
+                payload[target_field] = request.params.get(source_field)
+
+        # 确保 params 不为空
+        if "params" in payload and not payload["params"]:
+            del payload["params"]
+    else:
+        # 默认 payload 格式
+        payload = {
+            "model_id": external_model_id,
+            "prompt": request.prompt or "",
+            "params": request.params or {}
+        }
+        if request.images:
+            payload["images"] = request.images
+
+    try:
+        # 6. 调用外部 API
+        result = await call_external_api(api_contract, payload)
+
+        if not result.get("success"):
+            crud.refund_points(db, deduction_id, f"API调用失败: {result.get('error', '未知错误')}")
+            raise HTTPException(
+                status_code=500,
+                detail=result.get("error", "调用外部 API 失败")
+            )
+
+        task_id = result.get("task_id")
+
+        # 7. 创建任务记录
+        prompt_summary = request.prompt[:500] if request.prompt else None
+        crud.create_task_record(
+            db,
+            task_id=task_id,
+            user_id=current_user.id,
+            model_id=request.model_id,
+            deduction_id=deduction_id,
+            task_type=model.model_type,
+            cost_points=cost_points,
+            prompt_summary=prompt_summary,
+            params_json=request.params,
+            status="pending"
+        )
+
+        return schemas.TaskSubmitResponse(
+            success=True,
+            use_cloud_function=False,
+            task_id=task_id,
+            deduction_id=deduction_id,
+            estimated_time=result.get("estimated_time", 300),
+            cost_points=cost_points
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        crud.refund_points(db, deduction_id, f"异常: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"调用失败: {str(e)}")
+
+
+@app.get("/api/tasks/{task_id}/status", response_model=schemas.TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    查询任务状态
+
+    - 验证任务归属
+    - 调用外部 API 查询
+    - 失败/超时时自动退款
+    """
+    # 验证归属
+    task = crud.get_task_record_by_user(db, task_id, current_user.id)
+    if not task:
+        raise HTTPException(status_code=403, detail="无权查询此任务")
+
+    # 如果任务已终态，直接返回本地状态
+    if task.status in ["success", "failed", "timeout", "refunded"]:
+        return schemas.TaskStatusResponse(
+            success=True,
+            task={
+                "task_id": task.task_id,
+                "status": task.status,
+                "result_url": task.result_url
+            },
+            refunded=(task.status == "refunded")
+        )
+
+    # 获取模型的 api_contract
+    model = crud.get_model_by_id(db, task.model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="模型不存在")
+
+    config_schema = model.config_schema or {}
+    api_contract = config_schema.get("api_contract", {})
+
+    # 调用外部 API 查询状态
+    result = await query_task_status(api_contract, task_id)
+
+    if not result.get("success"):
+        return schemas.TaskStatusResponse(
+            success=False,
+            error=result.get("error", "查询失败")
+        )
+
+    # 解析响应（使用 response_mapping）
+    response_mapping = config_schema.get("response_mapping", {})
+    task_data = result.get("task", result)
+
+    # 从 response_mapping 提取状态
+    if response_mapping:
+        status_path = response_mapping.get("status_path", "")
+        result_url_path = response_mapping.get("result_url_path", "")
+
+        # 简单的路径提取
+        if status_path and "task.status" in status_path:
+            status = task_data.get("status", result.get("status", "pending"))
+        else:
+            status = task_data.get("status", "pending")
+
+        if result_url_path and "task.result_url" in result_url_path:
+            result_url = task_data.get("result_url")
+        else:
+            result_url = task_data.get("result_url")
+    else:
+        status = task_data.get("status", "pending")
+        result_url = task_data.get("result_url")
+
+    # 更新本地记录状态
+    crud.update_task_status(db, task_id, status, result_url)
+
+    # 失败/超时时自动退款
+    if status in ["failed", "timeout"]:
+        if task.deduction_id:
+            crud.refund_points(db, task.deduction_id, f"任务{status}")
+        return schemas.TaskStatusResponse(
+            success=True,
+            task={"task_id": task_id, "status": status, "result_url": result_url},
+            refunded=True,
+            message="积分已退还"
+        )
+
+    return schemas.TaskStatusResponse(
+        success=True,
+        task={"task_id": task_id, "status": status, "result_url": result_url},
+        refunded=False
+    )
+
+
+@app.post("/api/tasks/{task_id}/confirm", response_model=schemas.TaskConfirmResponse)
+async def confirm_task(
+    task_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    确认扣费
+    """
+    task = crud.get_task_record_by_user(db, task_id, current_user.id)
+    if not task:
+        raise HTTPException(status_code=403, detail="无权操作此任务")
+
+    if task.status == "success":
+        # 已经确认过了
+        return schemas.TaskConfirmResponse(success=True, message="扣费已确认")
+
+    # 获取模型配置查询最新状态
+    model = crud.get_model_by_id(db, task.model_id)
+    if model:
+        config_schema = model.config_schema or {}
+        api_contract = config_schema.get("api_contract", {})
+        result = await query_task_status(api_contract, task_id)
+
+        response_mapping = config_schema.get("response_mapping", {})
+        task_data = result.get("task", result)
+
+        if response_mapping and "task.status" in response_mapping.get("status_path", ""):
+            status = task_data.get("status", "pending")
+        else:
+            status = task_data.get("status", "pending")
+
+        result_url = task_data.get("result_url")
+
+        if status != "success":
+            raise HTTPException(status_code=400, detail="任务未成功完成，无法确认扣费")
+
+        # 更新记录
+        crud.update_task_status(db, task_id, "success", result_url)
+
+    # 确认扣费
+    if task.deduction_id:
+        crud.confirm_points(db, task.deduction_id)
+
+    return schemas.TaskConfirmResponse(success=True, message="扣费已确认")
+
+
+@app.post("/api/tasks/{task_id}/refund", response_model=schemas.TaskRefundResponse)
+async def refund_task(
+    task_id: str,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    退还积分
+    """
+    task = crud.get_task_record_by_user(db, task_id, current_user.id)
+    if not task:
+        raise HTTPException(status_code=403, detail="无权操作此任务")
+
+    if task.status == "refunded":
+        return schemas.TaskRefundResponse(
+            success=True,
+            refunded_amount=0,
+            message="积分已退还过"
+        )
+
+    # 退还积分
+    refunded_amount = 0
+    if task.deduction_id:
+        reserve = db.query(PointReserve).filter(
+            PointReserve.deduction_id == task.deduction_id,
+            PointReserve.status == "reserved"
+        ).first()
+
+        if reserve:
+            refunded_amount = reserve.amount
+            crud.refund_points(db, task.deduction_id, "任务失败/超时退款")
+
+    # 更新记录
+    crud.update_task_status(db, task_id, "refunded")
+
+    return schemas.TaskRefundResponse(
+        success=True,
+        refunded_amount=refunded_amount,
+        message="积分已退还"
+    )
 
 
 # ============ 启动入口 ============

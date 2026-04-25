@@ -15,10 +15,30 @@ cd backend && python init_db.py              # Initialize database
 cd backend && uvicorn main:app --reload --port 8000
 
 # User Frontend (Vue 3)
-cd user-web && npm install && npm run dev   # port 8080
+cd user-web && npm install && npm run dev   # dev server on port 8080
+cd user-web && npm run build                # production build to dist/
 
 # Admin Frontend (Vue 3)
-cd admin-web && npm install && npm run dev  # port 8081
+cd admin-web && npm install && npm run dev  # dev server on port 8081
+cd admin-web && npm run build               # production build to dist/
+```
+
+**API Documentation:** FastAPI auto-generates Swagger UI at `http://localhost:8000/docs`
+
+### Docker Deployment
+
+```bash
+# Build and start all services
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Restart services
+docker-compose restart
+
+# Stop services
+docker-compose down
 ```
 
 ## Tech Stack
@@ -88,8 +108,12 @@ See `backend/crud.py`: `reserve_points()`, `confirm_points()`, `refund_points()`
 
 Models are configured in `ai_models` table with `config_schema` JSON field. The `pricing_engine.py` and `payload_builder.py` in `backend/engines/` handle dynamic pricing and request construction.
 
+Both engines export singleton instances: `pricing_engine` and `payload_builder` (import from `backend/engines`).
+
 Key config_schema sections:
-- `pricing_rules`: Dynamic pricing (mode: static/dynamic/tiered)
+- `pricing_rules`: Dynamic pricing (mode: fixed/dynamic)
+  - `fixed`: Uses `fixed_price` × count
+  - `dynamic`: Uses `base_price` + `add_price` (duration/resolution/aspect_ratio)
 - `request_mapping`: API request field mapping
 - `response_mapping`: API response extraction rules
 - `frontend_config`: UI options (dropdowns, sliders, etc.)
@@ -104,9 +128,10 @@ Key config_schema sections:
 - `backend/engines/payload_builder.py`: API request construction
 
 **Frontend:**
-- `user-web/src/api/index.js`: Frontend AI calls with placeholder pattern
+- `user-web/src/api/index.js`: Frontend AI calls with placeholder pattern (see `callAI` function)
 - `user-web/src/api/request.js`: Axios instance with auth interceptor
 - `user-web/src/views/ai/`: AI generation pages (VideoTool.vue, ImageTool.vue)
+- Note: user-web uses `unplugin-auto-import` and `unplugin-vue-components` for auto-imports
 
 **Cloud Function:**
 - `tencent-function/index.js`: Cloud function with `KEY_POOL`
