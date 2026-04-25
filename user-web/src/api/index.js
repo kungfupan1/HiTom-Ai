@@ -94,20 +94,37 @@ const AI_ENDPOINTS = {
 }
 
 /**
+ * 从响应对象中按路径提取值（支持 response_mapping）
+ * @param {object} obj - 响应对象
+ * @param {string} path - 路径字符串，如 "data[0].url"
+ */
+export const getValueByPath = (obj, path) => {
+  if (!path || !obj) return undefined
+  return path.split('.').reduce((acc, part) => {
+    if (acc == null) return acc
+    const match = part.match(/^(\w+)\[(\d+)\]$/)
+    if (match) return acc[match[1]]?.[parseInt(match[2])]
+    return acc[part]
+  }, obj)
+}
+
+/**
  * 看图生成文案
  * @param {object} data - { images, product_type, design_style, target_lang, target_num }
+ * @param {object} modelConfig - 可选的模型配置（包含 planning_config）
  */
-export const analyzeImages = (data) => {
+export const analyzeImages = (data, modelConfig = null) => {
+  const planning = modelConfig?.planning_config || {}
   return callAI(
-    AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
-    AI_ENDPOINTS.ANALYZE_IMAGES.url,
+    planning.placeholder || AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
+    planning.endpoint_url || AI_ENDPOINTS.ANALYZE_IMAGES.url,
     {
-      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      model: planning.model || 'Qwen/Qwen3-VL-30B-A3B-Instruct',
       messages: buildAnalyzeMessages(data),
-      max_tokens: 1500,
-      temperature: 0.7
+      max_tokens: planning.max_tokens || 1500,
+      temperature: planning.temperature ?? 0.7
     },
-    { timeout: 120000 }  // 2分钟超时
+    { timeout: 120000 }
   )
 }
 
@@ -301,12 +318,13 @@ export const getVideoStatus = (taskId, model) => {
 export const generateImage = (data, modelConfig = null) => {
   const { prompt, aspect_ratio, resolution, images, seed, model } = data
 
-  // 计算尺寸 (复刻旧项目逻辑)
-  const ratioMap = {
+  // 计算尺寸：从 request_mapping.size_calculation 读取，兜底硬编码
+  const sizeCalc = modelConfig?.request_mapping?.size_calculation || {}
+  const ratioMap = sizeCalc.ratio_map || {
     '1:1': [1, 1], '2:3': [2, 3], '3:2': [3, 2], '3:4': [3, 4], '4:3': [4, 3],
     '4:5': [4, 5], '5:4': [5, 4], '9:16': [9, 16], '16:9': [16, 9], '21:9': [21, 9]
   }
-  const sizeMap = { '1K': 1024, '2K': 2048, '4K': 4096 }
+  const sizeMap = sizeCalc.size_map || { '1K': 1024, '2K': 2048, '4K': 4096 }
 
   const ratio = aspect_ratio || '3:4'
   const res = resolution || '1K'
@@ -323,8 +341,24 @@ export const generateImage = (data, modelConfig = null) => {
   }
   const pixelSize = `${width}x${height}`
 
-  // 确定模型名称：优先使用传入的 model，其次向后兼容
-  let modelName = model || (resolution === '4K' ? 'nano-banana-2-4k' : 'nano-banana-2')
+  // 确定模型名称：从 request_mapping.model_selection 读取，兜底向后兼容
+  let modelName = model
+  if (!modelName) {
+    const selection = modelConfig?.request_mapping?.model_selection
+    if (selection?.rules) {
+      for (const rule of selection.rules) {
+        // 简单条件解析：resolution === '4K'
+        const m = rule.condition.match(/(\w+)\s*===?\s*['"]([^'"]+)['"]/)
+        if (m && res === m[2]) {
+          modelName = rule.model
+          break
+        }
+      }
+    }
+    if (!modelName) {
+      modelName = selection?.default || (res === '4K' ? 'nano-banana-2-4k' : 'nano-banana-2')
+    }
+  }
 
   // 处理 seed
   const finalSeed = seed && seed !== -1 ? seed : Date.now()
@@ -415,8 +449,9 @@ ${text}
 /**
  * 生图提示词规划 (参考旧项目 MyWebTool 的详细 Prompt)
  * @param {object} data - { images, product_type, selling_points, design_style, target_lang, num_screens }
+ * @param {object} modelConfig - 可选的模型配置（包含 planning_config）
  */
-export const planImagePrompts = (data) => {
+export const planImagePrompts = (data, modelConfig = null) => {
   const { images, product_type, selling_points, design_style, target_lang, num_screens } = data
 
   const productType = product_type || '通用产品'
@@ -501,17 +536,19 @@ export const planImagePrompts = (data) => {
     })
   }
 
+  // 从 planning_config 读取模型参数
+  const planning = modelConfig?.planning_config || {}
   return callAI(
-    AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
-    AI_ENDPOINTS.ANALYZE_IMAGES.url,
+    planning.placeholder || AI_ENDPOINTS.ANALYZE_IMAGES.placeholder,
+    planning.endpoint_url || AI_ENDPOINTS.ANALYZE_IMAGES.url,
     {
-      model: 'Qwen/Qwen3-VL-30B-A3B-Instruct',
+      model: planning.model || 'Qwen/Qwen3-VL-30B-A3B-Instruct',
       messages: [
         { role: 'system', content: systemInstruction },
         { role: 'user', content: userContent }
       ],
-      max_tokens: 4000,
-      temperature: 0.7
+      max_tokens: planning.max_tokens || 4000,
+      temperature: planning.temperature ?? 0.7
     },
     { timeout: 180000 }
   )

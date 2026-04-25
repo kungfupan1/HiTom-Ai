@@ -19,8 +19,8 @@
             </el-form-item>
 
             <!-- 参考图片上传 (可选) -->
-            <el-form-item label="参考图片 (可选，最多5张，支持拖拽)">
-              <el-upload action="#" list-type="picture-card" :auto-upload="false" :limit="5" :on-change="handleFileChange" :on-remove="handleRemove" multiple drag class="cyber-upload">
+            <el-form-item :label="`参考图片 (可选，最多${uploadMaxCount}张，支持拖拽)`">
+              <el-upload action="#" list-type="picture-card" :auto-upload="false" :limit="uploadMaxCount" :on-change="handleFileChange" :on-remove="handleRemove" multiple drag class="cyber-upload">
                 <el-icon><Plus /></el-icon>
               </el-upload>
             </el-form-item>
@@ -46,8 +46,12 @@
               </el-col>
             </el-row>
 
+            <el-form-item v-if="numImagesConfig" label="生成数量">
+              <el-input-number v-model="form.num_images" :min="numImagesConfig.min || 1" :max="numImagesConfig.max || 10" style="width: 100%" class="cyber-input-number" />
+            </el-form-item>
+
             <el-button type="primary" size="large" class="neon-btn" style="width: 100%" @click="manualGenerate" :loading="loading" :disabled="loading">
-              🚀 开始生成（{{ unitPrice }}积分）
+              🚀 开始生成（{{ unitPrice * form.num_images }}积分）
             </el-button>
           </el-form>
         </el-card>
@@ -115,7 +119,7 @@
 <script setup>
 import { reactive, ref, onMounted, watch, computed } from 'vue'
 import request from '../../api/request'
-import { generateImage as generateImageAPI } from '../../api/index'
+import { generateImage as generateImageAPI, getValueByPath } from '../../api/index'
 import { Plus, ZoomIn, Download, Close, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveAs } from 'file-saver'
@@ -162,6 +166,23 @@ const resolutionOptions = computed(() => {
   ]
 })
 
+const uploadMaxCount = computed(() => {
+  const refField = currentModel.value?.config_schema?.ui_schema?.find(f => f.field_name === 'ref_images')
+  return refField?.max_count || 5
+})
+
+const numImagesConfig = computed(() => {
+  const field = currentModel.value?.config_schema?.ui_schema?.find(f => f.field_name === 'num_images')
+  return field || null
+})
+
+const getUiDefault = (fieldName, fallback) => {
+  const schema = currentModel.value?.config_schema?.ui_schema
+  if (!schema) return fallback
+  const field = schema.find(f => f.field_name === fieldName)
+  return field?.default_value ?? fallback
+}
+
 const loadModels = async () => {
   try {
     const res = await request.get('/api/models?model_type=image')
@@ -183,6 +204,13 @@ const onModelChange = async () => {
       try { res.config_schema = JSON.parse(res.config_schema) } catch {}
     }
     currentModel.value = res
+
+    // 从 ui_schema 更新表单默认值
+    form.aspect_ratio = getUiDefault('aspect_ratio', '3:4')
+    form.resolution = getUiDefault('resolution', '1K')
+    if (numImagesConfig.value) {
+      form.num_images = numImagesConfig.value.default_value ?? 1
+    }
   } catch (e) {
     console.error('加载模型详情失败', e)
   }
@@ -198,7 +226,8 @@ const historyPanelRef = ref(null)
 const form = reactive({
   prompt: '',
   aspect_ratio: '3:4',
-  resolution: '1K'
+  resolution: '1K',
+  num_images: 1
 })
 
 // 全窗口图片预览状态
@@ -259,7 +288,7 @@ const nextImage = () => {
 const manualGenerate = async () => {
   if (!form.prompt.trim()) return ElMessage.warning('请输入生成指令')
 
-  const totalCost = unitPrice.value
+  const totalCost = unitPrice.value * form.num_images
 
   const userStore = (await import('@/stores/user')).useUserStore()
   if (userStore.points < totalCost) {
@@ -294,63 +323,71 @@ const manualGenerate = async () => {
     return
   }
 
-  emit('log', `开始手动图片生成${imageBase64List.value.length > 0 ? `（${imageBase64List.value.length}张参考图）` : ''}...`)
+  emit('log', `开始手动图片生成 ${form.num_images} 张${imageBase64List.value.length > 0 ? `（${imageBase64List.value.length}张参考图）` : ''}...`)
 
-  try {
-    const res = await generateImageAPI({
-      model: selectedModelId.value,
-      prompt: form.prompt,
-      aspect_ratio: form.aspect_ratio,
-      resolution: form.resolution,
-      images: imageBase64List.value.length > 0 ? imageBase64List.value : undefined,
-      seed: Date.now()
-    }, currentModel.value?.config_schema)
+  let successCount = 0
+  for (let i = 0; i < form.num_images; i++) {
+    emit('log', `[第 ${i+1}/${form.num_images} 张] 正在请求云端绘图...`)
+    try {
+      const res = await generateImageAPI({
+        model: selectedModelId.value,
+        prompt: form.prompt,
+        aspect_ratio: form.aspect_ratio,
+        resolution: form.resolution,
+        images: imageBase64List.value.length > 0 ? imageBase64List.value : undefined,
+        seed: Date.now() + i
+      }, currentModel.value?.config_schema)
 
-    const url = res.data?.[0]?.url || res.data?.url
-    if (url) {
-      generatedImages.value.unshift(url)
-      emit('log', `手动图片生成成功！`)
+      const resultPath = currentModel.value?.config_schema?.response_mapping?.result_url_path
+      const url = (resultPath ? getValueByPath(res, resultPath) : null) || res.data?.[0]?.url || res.data?.url
+      if (url) {
+        generatedImages.value.unshift(url)
+        emit('refresh-points')
+        emit('log', `第 ${i+1} 张生成成功！`)
+        successCount++
 
-      try {
-        const response = await fetch(url)
-        if (response.ok) {
-          const blob = await response.blob()
-          await cacheMedia(url, blob, 'image')
+        try {
+          const response = await fetch(url)
+          if (response.ok) {
+            const blob = await response.blob()
+            await cacheMedia(url, blob, 'image')
+          }
+        } catch (e) {
+          console.warn('缓存图片失败', e)
         }
-      } catch (e) {
-        console.warn('缓存图片失败', e)
+
+        saveImageHistory(url, form.prompt)
+      } else {
+        ElMessage.error(`第 ${i+1} 张失败`)
+        emit('log', `第 ${i+1} 张服务端拒绝: ${JSON.stringify(res)}`)
       }
+    } catch (e) {
+      let errMsg = e.message || '未知错误'
+      if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'
+      ElMessage.error(`第 ${i+1} 张请求出错`)
+      emit('log', `第 ${i+1} 张异常: ${errMsg}`)
+    }
+  }
 
-      saveImageHistory(url, form.prompt)
-
-      if (currentDeductionId.value) {
+  // 确认或退还积分
+  if (successCount > 0) {
+    if (currentDeductionId.value) {
+      try {
         await request.post('/api/points/confirm', { deduction_id: currentDeductionId.value })
         emit('log', '积分扣费已确认')
         emit('refresh-points')
-      }
-      ElMessage.success('图片生成完成')
-    } else {
-      ElMessage.error('生成失败')
-      emit('log', `服务端拒绝: ${JSON.stringify(res)}`)
-      if (currentDeductionId.value) {
-        await request.post('/api/points/refund', {
-          deduction_id: currentDeductionId.value,
-          reason: '手动图片生成失败'
-        })
-        emit('log', '积分已退还')
-        emit('refresh-points')
+      } catch (e) {
+        console.error('确认扣费失败', e)
       }
     }
-  } catch (e) {
-    let errMsg = e.message || '未知错误'
-    if (errMsg.includes('timeout')) errMsg = '请求超时(后端仍在运行)'
-    ElMessage.error('请求出错')
-    emit('log', `异常: ${errMsg}`)
+    ElMessage.success(`生成完成，成功 ${successCount} 张`)
+    emit('log', `任务全部结束`)
+  } else {
     if (currentDeductionId.value) {
       try {
         await request.post('/api/points/refund', {
           deduction_id: currentDeductionId.value,
-          reason: '手动图片生成异常'
+          reason: '手动图片生成全部失败'
         })
         emit('log', '积分已退还')
         emit('refresh-points')

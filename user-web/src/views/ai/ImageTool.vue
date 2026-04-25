@@ -43,12 +43,7 @@
 
               <el-form-item label="设计风格">
                  <el-select v-model="form.design_style" style="width: 100%" filterable allow-create default-first-option class="cyber-select" popper-class="cyber-popper">
-                   <el-option value="简约 Ins 风" label="简约 Ins 风" />
-                   <el-option value="高级奢华" label="高级奢华" />
-                   <el-option value="科技感" label="科技感" />
-                   <el-option value="清新自然" label="清新自然" />
-                   <el-option value="赛博朋克" label="赛博朋克" />
-                   <el-option value="国潮风" label="国潮风" />
+                   <el-option v-for="opt in designStyleOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                  </el-select>
               </el-form-item>
 
@@ -66,8 +61,8 @@
               </el-form-item>
 
               <!-- 参考图片上传 -->
-              <el-form-item label="参考图片 (最多5张，支持拖拽)">
-                <el-upload action="#" list-type="picture-card" :auto-upload="false" :limit="5" :on-change="handleFileChange" :on-remove="handleRemove" multiple drag class="cyber-upload">
+              <el-form-item :label="`参考图片 (最多${uploadMaxCount}张，支持拖拽)`">
+                <el-upload action="#" list-type="picture-card" :auto-upload="false" :limit="uploadMaxCount" :on-change="handleFileChange" :on-remove="handleRemove" multiple drag class="cyber-upload">
                   <el-icon><Plus /></el-icon>
                 </el-upload>
               </el-form-item>
@@ -77,21 +72,7 @@
                 <el-col :span="12">
                   <el-form-item label="目标语言">
                       <el-select v-model="form.target_lang" style="width: 100%" filterable placeholder="请选择语言" class="cyber-select" popper-class="cyber-popper">
-                        <el-option value="日语" label="日语" />
-                        <el-option value="英语" label="英语" />
-                        <el-option value="中文" label="中文" />
-                        <el-option value="韩语" label="韩语" />
-                        <el-option value="法语" label="法语" />
-                        <el-option value="德语" label="德语" />
-                        <el-option value="俄语" label="俄语" />
-                        <el-option value="西班牙语" label="西班牙语" />
-                        <el-option value="阿拉伯语" label="阿拉伯语" />
-                        <el-option value="葡萄牙语" label="葡萄牙语" />
-                        <el-option value="越南语" label="越南语" />
-                        <el-option value="泰语" label="泰语" />
-                        <el-option value="印尼语" label="印尼语" />
-                        <el-option value="意大利语" label="意大利语" />
-                        <el-option value="马来语" label="马来语" />
+                        <el-option v-for="opt in targetLangOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
                       </el-select>
                   </el-form-item>
                 </el-col>
@@ -240,7 +221,7 @@
 <script setup>
 import { reactive, ref, onMounted, watch, computed } from 'vue'
 import request from '../../api/request'
-import { analyzeImages as analyzeImagesAPI, planImagePrompts as planImagePromptsAPI, generateImage as generateImageAPI } from '../../api/index'
+import { analyzeImages as analyzeImagesAPI, planImagePrompts as planImagePromptsAPI, generateImage as generateImageAPI, getValueByPath } from '../../api/index'
 import { Plus, ZoomIn, Download, Close, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { saveAs } from 'file-saver'
@@ -291,6 +272,40 @@ const resolutionOptions = computed(() => {
   ]
 })
 
+const designStyleOptions = computed(() => {
+  return getUiOptions('design_style') || [
+    { label: '简约 Ins 风', value: '简约 Ins 风' }, { label: '高级奢华', value: '高级奢华' },
+    { label: '科技感', value: '科技感' }, { label: '清新自然', value: '清新自然' },
+    { label: '赛博朋克', value: '赛博朋克' }, { label: '国潮风', value: '国潮风' }
+  ]
+})
+
+const targetLangOptions = computed(() => {
+  return getUiOptions('target_lang') || [
+    { label: '日语', value: '日语' }, { label: '英语', value: '英语' },
+    { label: '中文', value: '中文' }, { label: '韩语', value: '韩语' },
+    { label: '法语', value: '法语' }, { label: '德语', value: '德语' },
+    { label: '俄语', value: '俄语' }, { label: '西班牙语', value: '西班牙语' },
+    { label: '阿拉伯语', value: '阿拉伯语' }, { label: '葡萄牙语', value: '葡萄牙语' },
+    { label: '越南语', value: '越南语' }, { label: '泰语', value: '泰语' },
+    { label: '印尼语', value: '印尼语' }, { label: '意大利语', value: '意大利语' },
+    { label: '马来语', value: '马来语' }
+  ]
+})
+
+const uploadMaxCount = computed(() => {
+  const refField = currentModel.value?.config_schema?.ui_schema?.find(f => f.field_name === 'ref_images')
+  return refField?.max_count || 5
+})
+
+// 从 ui_schema 读取字段默认值
+const getUiDefault = (fieldName, fallback) => {
+  const schema = currentModel.value?.config_schema?.ui_schema
+  if (!schema) return fallback
+  const field = schema.find(f => f.field_name === fieldName)
+  return field?.default_value ?? fallback
+}
+
 // 加载图片模型列表
 const loadModels = async () => {
   try {
@@ -314,6 +329,18 @@ const onModelChange = async () => {
       try { res.config_schema = JSON.parse(res.config_schema) } catch {}
     }
     currentModel.value = res
+
+    // 从 ui_schema 更新表单默认值
+    form.aspect_ratio = getUiDefault('aspect_ratio', '3:4')
+    form.resolution = getUiDefault('resolution', '1K')
+    form.design_style = getUiDefault('design_style', '简约 Ins 风')
+    form.target_lang = getUiDefault('target_lang', '中文')
+    const numField = res.config_schema?.ui_schema?.find(f => f.field_name === 'num_images')
+    if (numField) form.num_images = numField.default_value ?? 1
+
+    regenForm.aspect_ratio = form.aspect_ratio
+    regenForm.resolution = form.resolution
+
     await calculateCost()
   } catch (e) {
     console.error('加载模型详情失败', e)
@@ -444,7 +471,7 @@ const analyzeImages = async () => {
       design_style: form.design_style,
       target_lang: form.target_lang,
       target_num: count
-    })
+    }, currentModel.value?.config_schema)
 
     let content = res.choices?.[0]?.message?.content || ''
     if (content) {
@@ -521,7 +548,7 @@ const generateImage = async () => {
       design_style: form.design_style,
       target_lang: form.target_lang,
       num_screens: form.num_images
-    })
+    }, currentModel.value?.config_schema)
 
     const content = res.choices?.[0]?.message?.content || ''
 
@@ -602,7 +629,8 @@ const generateImage = async () => {
         seed: form.seed
       }, currentModel.value?.config_schema)
 
-      const url = res.data?.[0]?.url || res.data?.url
+      const resultPath = currentModel.value?.config_schema?.response_mapping?.result_url_path
+      const url = (resultPath ? getValueByPath(res, resultPath) : null) || res.data?.[0]?.url || res.data?.url
       if (url) {
         generatedImages.value.unshift(url)
         emit('refresh-points')
@@ -724,7 +752,8 @@ const regenerateImage = async () => {
       seed: Date.now()
     }, currentModel.value?.config_schema)
 
-    const url = res.data?.[0]?.url || res.data?.url
+    const resultPath = currentModel.value?.config_schema?.response_mapping?.result_url_path
+    const url = (resultPath ? getValueByPath(res, resultPath) : null) || res.data?.[0]?.url || res.data?.url
     if (url) {
       generatedImages.value.unshift(url)
       emit('log', `图片再编辑成功！`)
